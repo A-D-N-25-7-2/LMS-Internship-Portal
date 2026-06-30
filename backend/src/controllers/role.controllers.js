@@ -47,6 +47,14 @@ const getAllRoles = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, roles, "Roles fetched successfully."));
 });
 
+const getAllRolesNames = asyncHandler(async (req, res) => {
+  const roles = await Role.find().select("-permissions -description");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, roles, "Roles fetched successfully."));
+});
+
 const getRoleById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
@@ -147,4 +155,4 @@ const deleteRole = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "Role deleted successfully."));
 });
 
-export { createRole, getAllRoles, getRoleById, updateRole, deleteRole };
+export { createRole, getAllRoles, getAllRolesNames, getRoleById, updateRole, deleteRole,  };

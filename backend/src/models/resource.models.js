@@ -2,7 +2,7 @@ import mongoose, { Schema } from "mongoose";
 
 const resourceSchema = new Schema(
   {
-    name: {
+    title: {
       type: String,
       required: true,
       trim: true,
@@ -16,15 +16,19 @@ const resourceSchema = new Schema(
       ref: "Module",
       required: true,
     },
-    filePath: [
+    files: [
       {
         type: String,
       },
     ],
-    text: {
-      type: String,
-      trim: true,
-    },
+    links: [{
+      label: {
+        type: String
+      },
+      link: {
+        type: String
+      }
+    }],
     uploadedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

@@ -1,4 +1,5 @@
 import { Program } from "../models/program.models.js";
+import { Role } from "../models/role.models.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -26,13 +27,66 @@ const createProgram = asyncHandler(async (req, res) => {
 });
 
 const getAllPrograms = asyncHandler(async (req, res) => {
-  const programs = await Program.find();
 
-  if (programs.length === 0) {
-    return res
-      .status(200)
-      .json(new ApiResponse(200, null, "No programs created."));
-  }
+  const internRole = await Role.findOne({ name: "Intern" }).select("_id");
+  const internId = internRole._id;
+
+    const programs = await Program.aggregate([
+      {
+        $lookup: {
+          from: "batches",
+          localField: "_id",
+          foreignField: "program",
+          as: "batches",
+        },
+      },
+      {
+        $lookup: {
+          from: "modules",
+          localField: "_id",
+          foreignField: "program",
+          as: "modules", 
+        }
+      },
+      {
+        $lookup: {
+          from: "users",
+          let: { programId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $in: ["$$programId", "$program"] },
+                role: internId, // or the actual role ObjectId
+              },
+            },
+          ],
+          as: "interns",
+        },
+      },
+      {
+        $addFields: {
+          internCount: { $size: "$interns" },
+          batchCount: { $size: "$batches" },
+          moduleCount: { $size: "$modules" },
+        },
+      },
+      {
+        $project: {
+          interns: 0,
+          batches: 0,
+          modules: 0,
+        },
+      },
+    ]);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, programs, "Programs fetched."));
+});
+
+const getAllProgramsNames = asyncHandler(async (req, res) => {
+  
+  const programs = await Program.find().select("name _id");
 
   return res
     .status(200)
@@ -93,6 +147,7 @@ const deleteProgram = asyncHandler(async (req, res) => {
 export {
   createProgram,
   getAllPrograms,
+  getAllProgramsNames,
   getProgramById,
   updateProgram,
   deleteProgram,

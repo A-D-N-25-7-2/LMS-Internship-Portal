@@ -6,14 +6,14 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 
 const addResource = asyncHandler(async (req, res) => {
   const { module } = req.params;
-  const { name, description, filePath, text } = req.body;
+  const { title, description, files, links } = req.body;
 
   const existingModule = await Module.findById(module);
 
   if (!existingModule) {
     throw new ApiError(404, "Module not found!!");
   }
-  if (!name?.trim()) {
+  if (!title?.trim()) {
     throw new ApiError(400, "Resource name cannot be empty.");
   }
 
@@ -21,16 +21,16 @@ const addResource = asyncHandler(async (req, res) => {
     throw new ApiError(400, "File paths can only be in an array!!");
   }
 
-  if (!text?.trim() && filePath.length == 0) {
+  if (!links?.trim() && filePath.length == 0) {
     throw new ApiError(400, "Resource cannot be empty!!");
   }
 
   const createdResource = await Resource.create({
-    name: name.trim(),
+    title: title.trim(),
     description: description.trim(),
     module,
-    filePath,
-    text: text.trim(),
+    files,
+    links: links,
     uploadedBy: req.user._id,
   });
 
@@ -66,7 +66,7 @@ const getResourceById = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, resource, "Resource fetched."));
 });
 const updateResource = asyncHandler(async (req, res) => {
-  const { name, description, filePath, text } = req.body;
+  const { title, description, filePath, text } = req.body;
   const { id } = req.params;
 
   const resource = await Resource.findById(id);
@@ -75,11 +75,11 @@ const updateResource = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Resource not found!!");
   }
 
-  if (name != undefined) {
-    if (!name.trim()) {
-      throw new ApiError(400, "Resource name cannot be empty");
+  if (title != undefined) {
+    if (!title.trim()) {
+      throw new ApiError(400, "Resource title cannot be empty");
     }
-    resource.name = name;
+    resource.title = title;
   }
 
   if (description != undefined) {

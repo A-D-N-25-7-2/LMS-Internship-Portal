@@ -7,7 +7,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import mongoose from "mongoose";
 
 const createAssignment = asyncHandler(async(req, res)=> {
-    const {title, task, dueDate, totalMarks} = req.body;
+    const {title, description, dueDate, totalMarks} = req.body;
     const { module } = req.params;
 
     const existingModule = await Module.findById(module);
@@ -15,8 +15,8 @@ const createAssignment = asyncHandler(async(req, res)=> {
     if(!existingModule){
         throw new ApiError(404, "Module not found!!");
     }
-    if(!title?.trim() || !task?.trim()){
-        throw new ApiError(400, "Title or task cannot be empty!!");
+    if(!title?.trim() || !description?.trim()){
+        throw new ApiError(400, "Title or description cannot be empty!!");
     }
 
     if(!dueDate){
@@ -25,7 +25,7 @@ const createAssignment = asyncHandler(async(req, res)=> {
 
     const assignment = await Assignment.create({
         title: title.trim(),
-        task: task.trim(),
+        description: description.trim(),
         module,
         createdBy: req.user._id,
         dueDate,
@@ -67,7 +67,7 @@ const getAssignmentById = asyncHandler(async (req, res) => {
 });
 
 const updateAssignment = asyncHandler(async (req, res) => {
-    const {title , task, dueDate, totalMarks} = req.body;
+    const {title , description, dueDate, totalMarks} = req.body;
     const { id } = req.params;
 
     const assignment = await Assignment.findById(id);
@@ -83,15 +83,19 @@ const updateAssignment = asyncHandler(async (req, res) => {
         assignment.title = title.trim();
     }
 
-     if (task != undefined) {
-       if (!task?.trim()) {
+     if (description != undefined) {
+       if (!description?.trim()) {
          throw new ApiError(400, "Task cannot be empty!!");
        }
-       assignment.task = task.trim();
+       assignment.description = description.trim();
     }
 
     if(dueDate!=undefined){
         assignment.dueDate = dueDate;
+    }
+
+    if(totalMarks > 0){
+        assignment.totalMarks = totalMarks;
     }
 
     await assignment.save();

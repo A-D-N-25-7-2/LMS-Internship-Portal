@@ -1,6 +1,7 @@
 import { User } from "../models/user.models.js";
 import { Role } from "../models/role.models.js";
 import { Batch } from "../models/batch.models.js";
+import { Program } from "../models/program.models.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -8,6 +9,7 @@ import { cookieOptions } from "../constants.js";
 
 const createUser = asyncHandler(async (req, res) => {
   const { username, email, password, role, batch, mentorBatches } = req.body;
+  let { program } = req.body;
 
   if ([username, email, password].some((field) => field?.trim() === "")) {
     throw new ApiError(400, "All fields are required!!");
@@ -21,12 +23,48 @@ const createUser = asyncHandler(async (req, res) => {
     throw new ApiError(409, "User already exists with this email address!!");
   }
 
-  const fetchRole = await Role.findById({
+  const roleExists = await Role.findById({
     _id: role,
   });
 
-  if (!fetchRole) {
+  if (!roleExists) {
     throw new ApiError(404, "This role doesn't exist!!!");
+  }
+
+  if (batch !== "" && batch !== null) {
+    const existingBatch = await Batch.findById(batch);
+    if (!existingBatch) {
+      throw new ApiError(404, "Batch not found!!");
+    }
+    program = [existingBatch.program];
+  }
+
+  if (!Array.isArray(program)) {
+    throw new ApiError(400, "Program must be an array!!");
+  }
+
+  const validProgramsCount = await Program.countDocuments({
+    _id: { $in: program },
+  });
+
+  if (validProgramsCount !== program.length) {
+    throw new ApiError(400, "There are one or more invalid programs!!");
+  }
+
+  if (mentorBatches !== undefined && roleExists.name === "Mentor") {
+    if (!Array.isArray(mentorBatches)) {
+      throw new ApiError(400, "Mentor batches should be an array!!");
+    }
+    const validBatches = await Batch.find({ _id: { $in: mentorBatches } });
+    if (validBatches.length !== mentorBatches.length) {
+      throw new ApiError(400, "One or more batch IDs are invalid!!");
+    }
+
+    const batches = await Batch.find({ _id: { $in: mentorBatches } }).select(
+      "program",
+    );
+
+    program = [...new Set(batches.map((b) => b.program.toString()))];
   }
 
   const createUser = await User.create({
@@ -34,6 +72,7 @@ const createUser = asyncHandler(async (req, res) => {
     email,
     password,
     role,
+    program,
     batch: batch || undefined,
     mentorBatches: mentorBatches || undefined,
   });
@@ -54,7 +93,8 @@ const getAllUsers = asyncHandler(async (req, res) => {
     .select("-password -refreshToken")
     .populate("role")
     .populate("batch")
-    .populate("mentorBatches");
+    .populate("mentorBatches")
+    .populate("program");
 
   if (!users) {
     return res.status(200).json(new ApiResponse(200, "No users exist!", null));
@@ -85,7 +125,7 @@ const getUserById = asyncHandler(async (req, res) => {
 
 const updateUser = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { username, avatar, role, batch, mentorBatches } = req.body;
+  const { username, avatar, role, program, batch, mentorBatches } = req.body;
 
   const user = await User.findById(id);
 
@@ -108,20 +148,42 @@ const updateUser = asyncHandler(async (req, res) => {
     user.role = role;
   }
 
-  if (batch !== undefined) {
+  const roleExists = await Role.findById(role);
+
+  if (batch !== undefined && batch !== "" && roleExists.name === "Intern") {
     const batchExists = await Batch.findById(batch);
     if (!batchExists) {
       throw new ApiError(404, "Batch not found!!!");
     }
     user.batch = batch;
+    user.program = [batchExists.program];
   }
 
-  if (mentorBatches !== undefined) {
+  if (roleExists.name === "Intern" && batch === "") {
+    user.batch = null;
+    user.program = program;
+  }
+
+  if (mentorBatches !== undefined && roleExists.name === "Mentor") {
     if (!Array.isArray(mentorBatches)) {
       throw new ApiError(400, "Mentor batches should be an array!!");
     }
-
+    const validBatches = await Batch.find({ _id: { $in: mentorBatches } });
+    if (validBatches.length !== mentorBatches.length) {
+      throw new ApiError(400, "One or more batch IDs are invalid!!");
+    }
     user.mentorBatches = mentorBatches;
+    user.batch = null;
+    const batches = await Batch.find({ _id: { $in: mentorBatches } }).select(
+      "program",
+    );
+
+   const programs = [...new Set(batches.map((b) => b.program.toString()))];
+    user.program = programs;
+  }
+
+  if(roleExists.name !== "Mentor"){
+    user.mentorBatches = [];
   }
 
   await user.save();
@@ -139,12 +201,18 @@ const updateUser = asyncHandler(async (req, res) => {
 
 const deleteUser = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const user = await User.findById(id);
+  const user = await User.findById(id).populate("role", "name isSystemRole");
 
   if (!user) {
     throw new ApiError(404, "User not found!!");
   }
 
+  if (user.role.isSystemRole) {
+    throw new ApiError(
+      400,
+      "This user cannot be deleted as he/she is having a SystemRole.",
+    );
+  }
   await User.findByIdAndDelete(id);
 
   return res
@@ -154,19 +222,27 @@ const deleteUser = asyncHandler(async (req, res) => {
 
 const toggleIsActive = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const user = await User.findById(id);
+  const user = await User.findById(id).populate("role", "name isSystemRole");
 
   if (!user) {
     throw new ApiError(404, "User not found!!");
   }
 
+  if (user.role.isSystemRole) {
+    throw new ApiError(
+      400,
+      "This user cannot be deleted as he/she is having a SystemRole.",
+    );
+  }
+
   user.isActive = !user.isActive;
+
+  await user.save();
 
   return res
     .status(200)
     .json(new ApiResponse(200, user, "User active status toggled."));
 });
-
 
 export {
   createUser,

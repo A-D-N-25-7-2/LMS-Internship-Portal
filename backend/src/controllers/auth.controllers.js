@@ -24,9 +24,21 @@ const generateAccessAndRefreshToken = async (userId) => {
 };
 
 const getCurrentUser = asyncHandler(async (req, res) => {
-  return res
-    .status(200)
-    .json(new ApiResponse(200, req.user, "Current user fetched."));
+  const getMe = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user._id).populate({
+      path: "role",
+      populate: {
+        path: "permissions",
+        select: "key",
+      },
+    });
+
+    const permissions = user.role?.permissions?.map((p) => p.key) || [];
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, { user, permissions }, "User fetched"));
+  });
 });
 
 const loginUser = asyncHandler(async (req, res) => {
@@ -43,14 +55,24 @@ const loginUser = asyncHandler(async (req, res) => {
   const user = await User.findOne({
     email: email?.toLowerCase(),
   })
-    .populate("role")
-    .populate("batch")
-    .populate("mentorBatches");
+    .populate({
+      path: "role",
+      select: "permissions name isSystemRole",
+      populate: {
+        path: "permissions",
+        select: "key -_id",
+      },
+    })
+    .populate("mentorBatches")
+    .populate("batch", "name program");
 
   if (!user) {
     throw new ApiError(404, "User not found!!");
   }
 
+  if(user.refreshToken){
+    throw new ApiError(400, "You are already logged in an another device!!");
+  }
   const passwordValid = await user.isPasswordCorrect(password);
 
   if (!passwordValid) {
@@ -111,29 +133,27 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 
   user.username = username;
 
-  if(isActive !== undefined){
+  if (isActive !== undefined) {
     user.isActive = isActive;
   }
 
-     if (req.file) {
-       const fileBuffer = fs.readFileSync(req.file.path);
+  if (req.file) {
+    const fileBuffer = fs.readFileSync(req.file.path);
 
-       user.avatar = {
-         data: fileBuffer,
-         contentType: req.file.mimetype,
-       };
+    user.avatar = {
+      data: fileBuffer,
+      contentType: req.file.mimetype,
+    };
 
-       // Clean up the temp file from disk after reading
-       fs.unlinkSync(req.file.path);
-     }
+    // Clean up the temp file from disk after reading
+    fs.unlinkSync(req.file.path);
+  }
 
   await user.save();
 
   return res
     .status(200)
-    .json(
-      new ApiResponse(200, user, "Account details updated successfully"),
-    );
+    .json(new ApiResponse(200, user, "Account details updated successfully"));
 });
 
 const changeCurrentPassword = asyncHandler(async (req, res) => {
@@ -203,10 +223,14 @@ const refreshToken = asyncHandler(async (req, res) => {
         maxAge: 1000 * 60 * 60 * 24 * 7,
       })
       .json(
-        new ApiResponse(200,  {
-          accessToken,
-          refreshToken: newRefreshToken,
-        },"Access token refreshed successfully"),
+        new ApiResponse(
+          200,
+          {
+            accessToken,
+            refreshToken: newRefreshToken,
+          },
+          "Access token refreshed successfully",
+        ),
       );
   } catch (error) {
     if (error instanceof ApiError) throw error; // ✅ let your own errors pass through

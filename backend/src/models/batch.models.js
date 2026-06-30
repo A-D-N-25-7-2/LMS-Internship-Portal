@@ -19,11 +19,6 @@ const batchSchema = new Schema(
     endDate: {
       type: Date,
     },
-    status: {
-      type: String,
-      enum: ["upcoming", "ongoing", "completed"],
-      default: "upcoming",
-    },
   },
   { timestamps: true },
 );

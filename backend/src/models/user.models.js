@@ -22,6 +22,10 @@ const userSchema = new mongoose.Schema(
       ref: "Role",
       required: true,
     },
+    program: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Program",
+    }],
     batch: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Batch",

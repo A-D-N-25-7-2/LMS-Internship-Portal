@@ -7,7 +7,7 @@ const assignmentSchema = new Schema(
       required: true,
       trim: true,
     },
-    task: {
+    description: {
       type: String,
       trim: true,
     },

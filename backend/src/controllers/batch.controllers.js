@@ -5,8 +5,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 const createBatch = asyncHandler(async (req, res) => {
-  const { name, description, program, startDate, endDate, status } =
-    req.body;
+  const { name, description, program, startDate, endDate } = req.body;
 
   if (!name.trim()) {
     throw new ApiError(400, "Batch name is required!!");
@@ -26,22 +25,17 @@ const createBatch = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Start Date is required!!");
   }
 
-  const allowedStatus = ["upcoming", "ongoing", "completed"];
-
-  if(!allowedStatus.includes(status)){
-    throw new ApiError(400, "Invalid status!!!");
-  }
-
   const batch = await Batch.create({
     name: name.trim(),
     program,
     startDate,
-    endDate : endDate || null,
-    status: status || "upcoming",
+    endDate: endDate || null,
   });
 
-  const populatedBatch = await Batch.findById(batch._id)
-    .populate("program", "name");
+  const populatedBatch = await Batch.findById(batch._id).populate(
+    "program",
+    "name",
+  );
 
   return res
     .status(201)
@@ -49,13 +43,18 @@ const createBatch = asyncHandler(async (req, res) => {
 });
 
 const getAllBatches = asyncHandler(async (req, res) => {
-  const batches = await Batch.find().populate("program", "name");
+  const { program } = req.query;
+  const filter = program ? { program } : {};
 
-  if (batches.length === 0) {
-    return res
-      .status(200)
-      .json(new ApiResponse(200, null, "No batches created."));
-  }
+  const batches = await Batch.find(filter).populate("program", "name");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, batches, "Batches fetched."));
+});
+
+const getAllBatchesNames = asyncHandler(async (req, res) => {
+  const batches = await Batch.find().select("name _id");
 
   return res
     .status(200)
@@ -64,8 +63,7 @@ const getAllBatches = asyncHandler(async (req, res) => {
 
 const getBatchById = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const fetchBatch = await Batch.findById(id)
-    .populate("program");
+  const fetchBatch = await Batch.findById(id).populate("program");
 
   if (!fetchBatch) {
     throw new ApiError(404, "Batch doesn't exist!!");
@@ -78,10 +76,9 @@ const getBatchById = asyncHandler(async (req, res) => {
 
 const updateBatch = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { name, program, startDate, endDate, status } = req.body;
+  const { name, program, startDate, endDate } = req.body;
 
-  const fetchBatch = await Batch.findById(id)
-    .populate("program");
+  const fetchBatch = await Batch.findById(id).populate("program");
 
   if (!fetchBatch) {
     throw new ApiError(404, "Batch doesn't exist!!");
@@ -110,18 +107,9 @@ const updateBatch = asyncHandler(async (req, res) => {
     fetchBatch.endDate = endDate;
   }
 
-  const allowedStatus = ["upcoming", "ongoing", "completed"];
-  if (status !== undefined) {
-    if (!allowedStatus.includes(status)) {
-      throw new ApiError(400, "Invalid status");
-    }
-    fetchBatch.status = status;
-  }
-
   await fetchBatch.save();
 
-  const updatedBatch = await Batch.findById(fetchBatch._id)
-    .populate("program")
+  const updatedBatch = await Batch.findById(fetchBatch._id).populate("program");
 
   return res
     .status(200)
@@ -143,4 +131,11 @@ const deleteBatch = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, null, "Batch successfully deleted."));
 });
 
-export { createBatch, getAllBatches, getBatchById, updateBatch, deleteBatch };
+export {
+  createBatch,
+  getAllBatches,
+  getAllBatchesNames,
+  getBatchById,
+  updateBatch,
+  deleteBatch,
+};

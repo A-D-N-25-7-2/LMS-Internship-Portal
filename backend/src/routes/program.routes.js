@@ -4,6 +4,7 @@ import { authorizePermissions } from "../middlewares/authorizePermissions.middle
 import {
   createProgram,
   getAllPrograms,
+  getAllProgramsNames,
   getProgramById,
   updateProgram,
   deleteProgram,
@@ -18,10 +19,11 @@ router
   .post(authorizePermissions("program:create"), createProgram);
 
 router.route("/list").get(authorizePermissions("program:read"), getAllPrograms);
+router.route("/list-names").get(getAllProgramsNames);
 
 router
   .route("/get-program/:id")
-  .get(authorizePermissions("program:read"), getProgramById);
+  .get( getProgramById);
 
 router
   .route("/update/:id")

@@ -3,6 +3,7 @@ import { verifyJWT } from "../middlewares/auth.middlewares.js";
 import {
   createBatch,
   getAllBatches,
+  getAllBatchesNames,
   getBatchById,
   updateBatch,
   deleteBatch,
@@ -14,6 +15,7 @@ const router = Router();
 router.use(verifyJWT);
 router.route("/create").post(authorizePermissions("batch:create"), createBatch);
 router.route("/list").get(authorizePermissions("batch:read"), getAllBatches);
+router.route("/list-names").get(getAllBatchesNames);
 router
   .route("/get-batch/:id")
   .get(authorizePermissions("batch:read"), getBatchById);

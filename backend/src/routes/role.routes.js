@@ -3,6 +3,7 @@ import { verifyJWT } from "../middlewares/auth.middlewares.js";
 import {
   createRole,
   getAllRoles,
+  getAllRolesNames,
   getRoleById,
   updateRole,
   deleteRole,
@@ -14,6 +15,7 @@ router.use(verifyJWT);
 
 router.route("/create").post(authorizePermissions("role:create"), createRole);
 router.route("/list").get(authorizePermissions("role:read"), getAllRoles);
+router.route("/list-names").get(getAllRolesNames);
 router
   .route("/get-role/:id")
   .get(authorizePermissions("role:read"), getRoleById);
