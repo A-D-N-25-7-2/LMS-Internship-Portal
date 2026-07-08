@@ -16,9 +16,12 @@ const submissionSchema = Schema(
       type: Date,
       default: Date.now,
     },
-    filePath: [
+    links: [String],
+    files: [
       {
-        type: String
+        name: { type: String, required: true },
+        data: { type: Buffer, required: true },
+        contentType: { type: String, required: true },
       },
     ],
     text: {

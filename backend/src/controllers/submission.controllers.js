@@ -6,28 +6,40 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 
 const submitAssignment = asyncHandler(async (req, res) => {
   const { assignment } = req.params;
-  const { filePath, text } = req.body;
+  const { links, text } = req.body;
   const existingAssignment = await Assignment.findById(assignment);
 
   if (!existingAssignment) {
     throw new ApiError(404, "Assignment not found!!");
   }
 
-  const isLate = new Date() > new Date(existingAssignment.dueDate);
+  const isLate = existingAssignment.dueDate ? new Date() > new Date(existingAssignment.dueDate) : false;
 
-  if (!Array.isArray(filePath)) {
-    throw new ApiError(400, "File paths can only be in an array!!");
+  let parsedLinks = [];
+  if (links !== undefined) {
+    parsedLinks = typeof links === "string" ? JSON.parse(links) : links;
+    if (!Array.isArray(parsedLinks)) {
+      throw new ApiError(400, "Links can only be in an array!!");
+    }
   }
 
-  if (!text?.trim() && filePath.length == 0) {
+  const uploadedFiles = req.files || [];
+  const filesData = uploadedFiles.map((file) => ({
+    name: file.originalname,
+    data: file.buffer,
+    contentType: file.mimetype,
+  }));
+
+  if (!text?.trim() && parsedLinks.length === 0 && filesData.length === 0) {
     throw new ApiError(400, "Submission cannot be empty!!");
   }
 
   const submission = await Submission.create({
     assignment,
     intern: req.user._id,
-    filePath,
-    text: text.trim(),
+    links: parsedLinks,
+    files: filesData,
+    text: text?.trim(),
     isLate,
   });
 
@@ -38,27 +50,46 @@ const submitAssignment = asyncHandler(async (req, res) => {
 
 const resubmitAssignment = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { filePath, text } = req.body;
+  const { links, text } = req.body;
   const submission = await Submission.findById(id).populate("assignment");
 
   if (!submission) {
     throw new ApiError(404, "Submission not found!!");
   }
 
-  const isLate = new Date() > new Date(submission.assignment.dueDate);
+  const isLate = submission.assignment?.dueDate ? new Date() > new Date(submission.assignment.dueDate) : false;
 
   if (text != undefined) {
-    if (!text.trim()) {
-      throw new ApiError(400, "Text cannot be empty!!");
-    }
-    submission.text = text;
+    submission.text = text.trim();
   }
 
-  if (filePath != undefined) {
-    if (!Array.isArray(filePath)) {
-      throw new ApiError(400, "File paths can only be in an array!!");
+  if (links != undefined) {
+    const parsedLinks = typeof links === "string" ? JSON.parse(links) : links;
+    if (!Array.isArray(parsedLinks)) {
+      throw new ApiError(400, "Links can only be in an array!!");
     }
-    submission.filePath = filePath;
+    submission.links = parsedLinks;
+  }
+
+  if (req.body.remainingFiles !== undefined) {
+    const remaining = typeof req.body.remainingFiles === "string" ? JSON.parse(req.body.remainingFiles) : req.body.remainingFiles;
+    if (Array.isArray(remaining)) {
+      submission.files = submission.files.filter((f) => remaining.includes(f._id.toString()));
+    }
+  }
+
+  const uploadedFiles = req.files || [];
+  if (uploadedFiles.length > 0) {
+    const newFilesData = uploadedFiles.map((file) => ({
+      name: file.originalname,
+      data: file.buffer,
+      contentType: file.mimetype,
+    }));
+    submission.files.push(...newFilesData);
+  }
+
+  if (!submission.text?.trim() && submission.links.length === 0 && submission.files.length === 0) {
+    throw new ApiError(400, "Submission cannot be empty!!");
   }
 
   submission.isLate = isLate;
@@ -80,17 +111,16 @@ const getSubmissionsByAssignment = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Assignment not found!!");
   }
 
-  const submissions = await Submission.find({ assignment }).populate(
-    "intern",
-    "name avatar",
-  );
+  const submissions = await Submission.find({ assignment })
+    .populate("intern", "username")
+    .select("-files.data");
 
   return res
     .status(200)
     .json(new ApiResponse(200, submissions, "Submissions fetched."));
 });
 
-const getSubmissionByAssignment = asyncHandler(async (req, res) => {
+const getMySubmission = asyncHandler(async (req, res) => {
   const { assignment } = req.params;
 
   const existingAssignment = await Assignment.findById(assignment);
@@ -98,25 +128,12 @@ const getSubmissionByAssignment = asyncHandler(async (req, res) => {
   if (!existingAssignment) {
     throw new ApiError(404, "Assignment not found!!");
   }
-  const submission = await Submission.find({ assigment, intern: req.user._id });
+  const submission = await Submission.find({ assignment, intern: req.user._id })
+    .select("-files.data");
 
   return res
     .status(200)
     .json(new ApiResponse(200, submission, "Submissions fetched."));
-});
-
-const getSubmissionById = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-
-  const submission = await Submission.findById(id);
-
-  if (!submission) {
-    throw new ApiError(404, "Submission not found!!");
-  }
-
-  return res
-    .status(200)
-    .json(new ApiResponse(200, submission, "Submission fetched."));
 });
 
 const gradeSubmission = asyncHandler(async (req, res) => {
@@ -129,7 +146,7 @@ const gradeSubmission = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Submission not found!!");
   }
 
-  if (marks != undefined) {
+  if (marks === undefined || marks === null || isNaN(marks)) {
     throw new ApiError(400, "Marks cannot be empty!!");
   }
 
@@ -144,11 +161,36 @@ const gradeSubmission = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, submission, "Submission graded."));
 });
 
+const getSubmissionFile = asyncHandler(async (req, res) => {
+  const { id, index } = req.params;
+
+  const submission = await Submission.findById(id);
+
+  if (!submission) {
+    throw new ApiError(404, "Submission not found!!");
+  }
+
+  const idx = parseInt(index, 10);
+  if (isNaN(idx) || idx < 0 || idx >= submission.files.length) {
+    throw new ApiError(404, "File not found!!");
+  }
+
+  const file = submission.files[idx];
+
+  res.setHeader("Content-Type", file.contentType);
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename="${encodeURIComponent(file.name)}"`
+  );
+
+  return res.status(200).send(file.data);
+});
+
 export {
   submitAssignment,
   resubmitAssignment,
   getSubmissionsByAssignment,
-  getSubmissionByAssignment,
-  getSubmissionById,
+  getMySubmission,
   gradeSubmission,
+  getSubmissionFile,
 };

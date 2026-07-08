@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -40,9 +41,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Loader2, Plus, Pencil, Trash2, ShieldCheck } from "lucide-react";
+import { useSelector } from "react-redux";
 
 const RolesPage = () => {
   const { hasPermission } = usePermission();
+  const user = useSelector((state) => state.auth.user);
 
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState([]); // flat list
@@ -56,6 +59,7 @@ const RolesPage = () => {
   const [roleName, setRoleName] = useState("");
   const [roleDescription, setRoleDescription] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState([]); // array of permission _ids
+  const [isSystemRole, setIsSystemRole] = useState(false);
   const [formError, setFormError] = useState("");
   const [formLoading, setFormLoading] = useState(false);
 
@@ -113,6 +117,7 @@ const RolesPage = () => {
     setRoleName(role.name);
     setRoleDescription(role.description);
     setSelectedPermissions(role.permissions.map((p) => p._id));
+    setIsSystemRole(role.isSystemRole || false);
     setFormError("");
     setModalOpen(true);
   };
@@ -164,21 +169,25 @@ const RolesPage = () => {
     setFormError("");
 
     try {
+      let response;
       if (editTarget) {
-        await updateRole(editTarget._id, {
+        response = await updateRole(editTarget._id, {
           name: roleName.trim(),
           description: roleDescription.trim(),
           permissions: selectedPermissions,
+          isSystemRole: isSystemRole,
         });
+        setRoles((prev) => prev.map((role) => role._id === editTarget._id ? response.data.data : role));
       } else {
-        await createRole({
+        response = await createRole({
           name: roleName.trim(),
           description: roleDescription.trim(),
           permissions: selectedPermissions,
+          isSystemRole: isSystemRole,
         });
+        setRoles((prev) => [...prev, response.data.data]);
       }
       setModalOpen(false);
-      fetchData();
     } catch (err) {
       setFormError(err.response?.data?.message || "Operation failed");
     } finally {
@@ -193,7 +202,7 @@ const RolesPage = () => {
     try {
       await deleteRole(deleteTarget._id);
       setDeleteTarget(null);
-      fetchData();
+      setRoles((prev) => prev.filter((role) => role._id !== deleteTarget._id));
     } catch (err) {
       setError(err.response?.data?.message || "Failed to delete role");
       setDeleteTarget(null);
@@ -288,7 +297,8 @@ const RolesPage = () => {
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       {/* edit - blocked for system roles */}
-                      {hasPermission("role:update") && !role.isSystemRole && (
+                      {((hasPermission("role:update") && !role.isSystemRole) ||
+                        user?.role?.name === "Super Admin") && (
                         <Button
                           variant="secondary"
                           size="sm"
@@ -300,7 +310,8 @@ const RolesPage = () => {
                       )}
 
                       {/* delete - blocked for system roles */}
-                      {hasPermission("role:delete") && !role.isSystemRole && (
+                      {((hasPermission("role:delete") && !role.isSystemRole) ||
+                        user?.role?.name === "Super Admin") && (
                         <Button
                           variant="destructive"
                           size="sm"
@@ -312,11 +323,12 @@ const RolesPage = () => {
                       )}
 
                       {/* system role - no actions */}
-                      {role.isSystemRole && (
-                        <span className="text-xs text-muted-foreground pr-2">
-                          Protected
-                        </span>
-                      )}
+                      {role.isSystemRole &&
+                        user.role.name !== "Super Admin" && (
+                          <span className="text-xs text-muted-foreground pr-2">
+                            Protected
+                          </span>
+                        )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -357,21 +369,36 @@ const RolesPage = () => {
                 {formError}
               </div>
             )}
+            <div className = "flex gap-4">
+              {/* role name */}
+              <div className="space-y-2">
+                <Label>Role Name</Label>
+                <Input
+                  placeholder="e.g. Mentor, Content Manager"
+                  value={roleName}
+                  onChange={(e) => {
+                    setRoleName(e.target.value);
+                    setFormError("");
+                  }}
+                  disabled={formLoading}
+                />
+              </div>
 
-            {/* role name */}
-            <div className="space-y-2">
-              <Label>Role Name</Label>
-              <Input
-                placeholder="e.g. Mentor, Content Manager"
-                value={roleName}
-                onChange={(e) => {
-                  setRoleName(e.target.value);
-                  setFormError("");
-                }}
-                disabled={formLoading}
-              />
+              {/* System Role Toggle */}
+              {user.role.name === "Super Admin" && (
+              <div className="space-y-2 items-center flex flex-col">
+                <Label>System Role</Label>
+                <Switch
+                  checked={isSystemRole}
+                  onCheckedChange={(checked) => {
+                    setIsSystemRole(checked);
+                    setFormError("");
+                  }}
+                  disabled={formLoading}
+                />
+              </div>
+              )}
             </div>
-
             {/* Description */}
             <div className="space-y-2">
               <Label>Description (optional)</Label>
@@ -385,7 +412,6 @@ const RolesPage = () => {
                 disabled={formLoading}
               />
             </div>
-
             <Separator />
 
             {/* permissions - grouped by resource */}

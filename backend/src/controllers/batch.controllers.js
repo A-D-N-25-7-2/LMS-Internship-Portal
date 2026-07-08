@@ -3,7 +3,7 @@ import { Program } from "../models/program.models.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-
+import { getRoleId } from "./dashboard.controllers.js";
 const createBatch = asyncHandler(async (req, res) => {
   const { name, description, program, startDate, endDate } = req.body;
 
@@ -44,7 +44,14 @@ const createBatch = asyncHandler(async (req, res) => {
 
 const getAllBatches = asyncHandler(async (req, res) => {
   const { program } = req.query;
-  const filter = program ? { program } : {};
+  let filter = {};
+  if (program) {
+    filter.program = program;
+  }
+  const mentorRoleId = await getRoleId("Mentor");
+ if (req.user.role.equals(mentorRoleId)) {
+   filter._id = { $in: req.user.mentorBatches };
+ }
 
   const batches = await Batch.find(filter).populate("program", "name");
 
@@ -122,6 +129,11 @@ const deleteBatch = asyncHandler(async (req, res) => {
 
   if (!fetchBatch) {
     throw new ApiError(404, "Batch doesn't exist!!");
+  }
+
+  const associatedUsers = await User.find({ batch: fetchBatch._id });
+  if (associatedUsers.length > 0) {
+    throw new ApiError(400, "Cannot delete batch with associated users!!");
   }
 
   await Batch.findByIdAndDelete(id);

@@ -59,7 +59,7 @@ const permissionsList = [
     resource: "submission",
     label: "Create Submission",
   },
-  { key: "submission:read", resource: "submission", label: "View Batches" },
+  { key: "submission:read", resource: "submission", label: "View Submission" },
   {
     key: "submission:update",
     resource: "submission",
@@ -67,6 +67,13 @@ const permissionsList = [
   },
   { key: "submission:get", resource: "submission", label: "Get Submission" },
   { key: "submission:grade", resource: "submission", label: "Grade Submission" },
+  {key: "email:update" , resource: "email", label: "Update Email"},
+  {key: "intern:view" , resource: "intern", label: "View Intern"},
+  {key: "intern:update" , resource: "intern", label: "Update Intern"},
+  {key: "college:create", resource: "college", label: "Create College"},
+  {key: "college:read", resource: "college", label: "View College"},
+  {key: "college:update", resource: "college", label: "Update College"},
+  {key: "college:delete", resource: "college", label: "Delete College"},
 ];
 
 export const seedDatabase = async () => {

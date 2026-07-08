@@ -61,11 +61,11 @@ const updateAttendance = asyncHandler(async(req, res) =>{
     const attendance = await Attendance.findById(id);
 
     if(!attendance){
-        throw new ApiError("Attendance doesn't exists!!");
+        throw new ApiError(404, "Attendance doesn't exists!!");
     }
 
     if(!Array.isArray(record) || record.length == 0){
-        throw new ApiError ("Record is required!!");
+        throw new ApiError (400, "Record is required!!");
     }
 
     const validStatuses = ["present", "absent"];
@@ -92,7 +92,7 @@ const updateAttendance = asyncHandler(async(req, res) =>{
 const getAttendanceByBatch = asyncHandler(async (req, res) => {
   const { batch } = req.params;
 
-  const batchExists = await Batch.findOne({ batch });
+  const batchExists = await Batch.findById( batch );
 
   if (!batchExists) {
     throw new ApiError(404, "Batch not found!!");

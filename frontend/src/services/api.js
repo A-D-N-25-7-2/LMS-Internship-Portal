@@ -13,20 +13,27 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes("/auth/login")
+    ) {
       originalRequest._retry = true;
 
       try {
-        const { data } = await axios.post(
+        await axios.post(
           "/api/v1/auth/refresh-token",
           {},
           { withCredentials: true },
         );
 
         return api(originalRequest);
-      } catch {
+      } catch (refreshError) {
         store.dispatch(logout());
-        window.location.href = "/login";
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
+        }
+        return Promise.reject(refreshError);
       }
     }
 

@@ -6,7 +6,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 const createRole = asyncHandler(async (req, res) => {
-  const { name, description, permissions } = req.body;
+  const { name, description, permissions, isSystemRole } = req.body;
 
   if (!name?.trim()) {
     throw new ApiError(400, "Role name cannot be empty!!");
@@ -30,6 +30,7 @@ const createRole = asyncHandler(async (req, res) => {
     name: name.trim(),
     description,
     permissions,
+    isSystemRole: isSystemRole || false,
   });
 
   const fetchedRole = await Role.findById(role._id).populate("permissions");
@@ -48,7 +49,11 @@ const getAllRoles = asyncHandler(async (req, res) => {
 });
 
 const getAllRolesNames = asyncHandler(async (req, res) => {
-  const roles = await Role.find().select("-permissions -description");
+  const userRole = await Role.findById(req.user.role).select("name");
+  
+  const filter = userRole.name === "Super Admin" ? {} : { isSystemRole: false };
+
+  const roles = await Role.find(filter).select("-permissions -description");
 
   return res
     .status(200)
@@ -69,7 +74,7 @@ const getRoleById = asyncHandler(async (req, res) => {
 
 const updateRole = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { name, permissions, description } = req.body;
+  const { name, permissions, description, isSystemRole } = req.body;
 
   const role = await Role.findById(id);
 
@@ -78,7 +83,10 @@ const updateRole = asyncHandler(async (req, res) => {
   }
 
   if (role.isSystemRole) {
-    throw new ApiError(403, "System Role cannot be updated!!");
+    const userRole = await Role.findById(req.user.role);
+    if (userRole.name !== "Super Admin") {
+      throw new ApiError(403, "System Role cannot be updated!!");
+    }
   }
 
   if (name !== undefined) {
@@ -100,6 +108,10 @@ const updateRole = asyncHandler(async (req, res) => {
 
   if (description !== undefined) {
     role.description = description.trim();
+  }
+
+  if (isSystemRole !== undefined) {
+    role.isSystemRole = isSystemRole;
   }
 
   if (permissions) {
@@ -137,7 +149,10 @@ const deleteRole = asyncHandler(async (req, res) => {
   }
 
   if (role.isSystemRole) {
-    throw new ApiError(403, "System Role cannot be deleted!!");
+    const userRole = await Role.findById(req.user.role);
+    if (userRole.name !== "Super Admin") {
+      throw new ApiError(403, "System Role cannot be deleted!!");
+    }
   }
 
   const usersWithRole = await User.countDocuments({ role: id });

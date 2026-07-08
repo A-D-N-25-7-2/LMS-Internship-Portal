@@ -24,21 +24,28 @@ const generateAccessAndRefreshToken = async (userId) => {
 };
 
 const getCurrentUser = asyncHandler(async (req, res) => {
-  const getMe = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.user._id).populate({
-      path: "role",
-      populate: {
-        path: "permissions",
-        select: "key",
-      },
-    });
+   const user = await User.findById(req.user._id)
+     .select("-password -refreshToken")
+     .populate({
+       path: "role",
+       populate: {
+         path: "permissions",
+         select: "key",
+       },
+     })
+     .populate("batch", "name program")
+     .populate("mentorBatches", "name")
+     .populate("program", "name");
 
-    const permissions = user.role?.permissions?.map((p) => p.key) || [];
+   if (!user) {
+     throw new ApiError(404, "User not found!!");
+   }
 
-    return res
-      .status(200)
-      .json(new ApiResponse(200, { user, permissions }, "User fetched"));
-  });
+   const permissions = user.role?.permissions?.map((p) => p.key) || [];
+
+   return res
+     .status(200)
+     .json(new ApiResponse(200, { user, permissions }, "User fetched"));
 });
 
 const loginUser = asyncHandler(async (req, res) => {
@@ -70,9 +77,6 @@ const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found!!");
   }
 
-  if(user.refreshToken){
-    throw new ApiError(400, "You are already logged in an another device!!");
-  }
   const passwordValid = await user.isPasswordCorrect(password);
 
   if (!passwordValid) {
@@ -123,7 +127,7 @@ const logoutUser = asyncHandler(async (req, res) => {
 });
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
-  const { username, isActive } = req.body;
+  const { username } = req.body;
 
   if (!username?.trim()) {
     throw new ApiError(400, "username is required!!");
@@ -133,27 +137,18 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 
   user.username = username;
 
-  if (isActive !== undefined) {
-    user.isActive = isActive;
-  }
-
-  if (req.file) {
-    const fileBuffer = fs.readFileSync(req.file.path);
-
+  if(req.file) {
     user.avatar = {
-      data: fileBuffer,
+      data: req.file.buffer,
       contentType: req.file.mimetype,
     };
-
-    // Clean up the temp file from disk after reading
-    fs.unlinkSync(req.file.path);
   }
 
   await user.save();
 
   return res
     .status(200)
-    .json(new ApiResponse(200, user, "Account details updated successfully"));
+    .json(new ApiResponse(200, {username: user.username, avatar: user.avatar }, "Account details updated successfully"));
 });
 
 const changeCurrentPassword = asyncHandler(async (req, res) => {
@@ -238,6 +233,28 @@ const refreshToken = asyncHandler(async (req, res) => {
   }
 });
 
+const removeAvatar = asyncHandler(async(req, res) => {
+  const user = await User.findById(req.user._id);
+
+  if(!user){
+    throw new ApiError(404, "User not found");
+  }
+
+  if(!user.avatar || !user.avatar.data){
+    throw new ApiError(400, "User already has the default avatar!!");
+  }
+  
+  user.avatar = {
+    data: null,
+    contentType: null
+  };
+  await user.save();
+
+  return res
+  .status(200)
+  .json(new ApiResponse(200, null, "User custom avatar removed."));
+});
+
 export {
   loginUser,
   logoutUser,
@@ -245,4 +262,5 @@ export {
   refreshToken,
   changeCurrentPassword,
   updateAccountDetails,
+  removeAvatar,
 };

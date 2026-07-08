@@ -5,29 +5,30 @@ import {
   submitAssignment,
   resubmitAssignment,
   getSubmissionsByAssignment,
-  getSubmissionByAssignment,
-  getSubmissionById,
+  getMySubmission,
   gradeSubmission,
+  getSubmissionFile,
 } from "../controllers/submission.controllers.js";
+import { upload } from "../middlewares/upload.middlewares.js";
 
 const router = Router();
 router.use(verifyJWT);
 
-router.route("/create/:assignment").post(authorizePermissions("submission:create"), submitAssignment);
+router.route("/create/:assignment").post(authorizePermissions("submission:create"), upload.array("files"), submitAssignment);
 router
   .route("/update/:id")
-  .patch(authorizePermissions("submission:update"), resubmitAssignment);
+  .patch(authorizePermissions("submission:update"), upload.array("files"), resubmitAssignment);
 router
   .route("/list/:assignment")
   .get(authorizePermissions("submission:read"), getSubmissionsByAssignment);
 router
-  .route("/get-by-assignment")
-  .get(authorizePermissions("submission:read"), getSubmissionByAssignment);
+  .route("/get-my-submission/:assignment")
+  .get(getMySubmission);
 router
-  .route("/get-assignment")
-  .get(authorizePermissions("submission:get"), getSubmissionById);
-router
-  .route("/grade")
+  .route("/grade/:id")
   .patch(authorizePermissions("submission:grade"), gradeSubmission);
+router
+  .route("/file/:id/:index")
+  .get(authorizePermissions("submission:read"), getSubmissionFile);
 
 export default router;

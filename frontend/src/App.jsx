@@ -7,21 +7,45 @@ import DashboardPage from "./pages/dashboard/DashboardPage";
 import UsersPage from "./pages/users/UsersPage";
 import RolesPage from "./pages/roles/RolesPage";
 import ProgramsPage from "./pages/programs/ProgramsPage";
-import BatchesPage from "./pages/batches/BatchesPage";
-import ModulesPage from "./pages/modules/ModulesPage";
-import ResourcesPage from "./pages/resources/ResourcesPage";
-import AssignmentsPage from "./pages/assignments/AssignmentsPage";
-import SubmissionsPage from "./pages/submissions/SubmissionsPage";
+import BatchInternsPage from "./pages/batches/BatchInternsPage";
 import AttendancePage from "./pages/attendance/AttendancePage";
 import ProfilePage from "./pages/profile/ProfilePage";
 import ProgramDetailPage from "./pages/programs/ProgramDetailPage";
 import ModuleDetailPage from "./pages/modules/ModuleDetailPage";
-import { getCurrentUser, setCredentials } from "./features/auth/authSlice";
-import { useEffect } from "react";
+import ResourceDetailPage from "./pages/resources/ResourceDetailPage";
+import AssignmentDetailPage from "./pages/assignments/AssignmentDetailPage";
+import CollegePage from "./pages/colleges/CollegePage";
+import { getCurrentUser, setCredentials, logout } from "./features/auth/authSlice";
+import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 const App = () => {
+  const dispatch = useDispatch();
   const { isAuthenticated } = useSelector((state) => state.auth);
+  const [authChecked, setAuthChecked] = useState(false);
 
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        const res = await getCurrentUser();
+        const { user, permissions } = res.data.data;
+        dispatch(setCredentials({ user, permissions }));
+      } catch {
+        dispatch(logout());
+      } finally {
+        setAuthChecked(true);
+      }
+    };
+    initAuth();
+  }, [dispatch]);
+
+   if (!authChecked) {
+     return (
+       <div className="flex h-screen items-center justify-center">
+         <Loader2 className="size-6 animate-spin text-muted-foreground" />
+       </div>
+     );
+   }
  
   return (
     <BrowserRouter>
@@ -76,10 +100,10 @@ const App = () => {
             }
           />
           <Route
-            path="batches"
+            path="colleges"
             element={
-              <ProtectedRoute permission="batch:read">
-                <BatchesPage />
+              <ProtectedRoute permission="college:read">
+                <CollegePage />
               </ProtectedRoute>
             }
           />
@@ -92,35 +116,34 @@ const App = () => {
             }
           />
           <Route
-            path="modules/:moduleId"
+            path="programs/:programId/modules/:moduleId"
             element={
               <ProtectedRoute permission="module:read">
                 <ModuleDetailPage />
               </ProtectedRoute>
             }
           />
-
           <Route
-            path="resources"
+            path="/programs/modules/:moduleId/resources/:resourceId"
             element={
               <ProtectedRoute permission="resource:read">
-                <ResourcesPage />
+                <ResourceDetailPage />
               </ProtectedRoute>
             }
           />
           <Route
-            path="assignments"
+            path="/modules/:moduleId/assignments/:assignmentId"
             element={
               <ProtectedRoute permission="assignment:read">
-                <AssignmentsPage />
+                <AssignmentDetailPage />
               </ProtectedRoute>
             }
           />
           <Route
-            path="submissions"
+            path="programs/:programId/batches/:batchId"
             element={
-              <ProtectedRoute permission="submission:read">
-                <SubmissionsPage />
+              <ProtectedRoute permission="batch:read">
+                <BatchInternsPage />
               </ProtectedRoute>
             }
           />

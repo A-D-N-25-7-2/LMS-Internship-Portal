@@ -3,10 +3,11 @@ import { Module } from "../models/module.models.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import mongoose from "mongoose";
 
 const addResource = asyncHandler(async (req, res) => {
   const { module } = req.params;
-  const { title, description, files, links } = req.body;
+  const { title, description, links } = req.body;
 
   const existingModule = await Module.findById(module);
 
@@ -17,26 +18,47 @@ const addResource = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Resource name cannot be empty.");
   }
 
-  if (!Array.isArray(filePath)) {
-    throw new ApiError(400, "File paths can only be in an array!!");
+  let parsedLinks = [];
+  if (links !== undefined) {
+
+    parsedLinks = typeof links === "string" ? JSON.parse(links) : links;
+    console.log("parsedLinks:", parsedLinks);
+    if (!Array.isArray(parsedLinks)) {
+      throw new ApiError(400, "Links can only be in an array!!");
+    }
   }
 
-  if (!links?.trim() && filePath.length == 0) {
+  const uploadedFiles = req.files || [];
+
+  if (uploadedFiles.length === 0 && parsedLinks.length === 0) {
     throw new ApiError(400, "Resource cannot be empty!!");
   }
 
+  const filesData = uploadedFiles.map((file) => ({
+    name: file.originalname,
+    data: file.buffer,
+    contentType: file.mimetype,
+  }));
+
   const createdResource = await Resource.create({
     title: title.trim(),
-    description: description.trim(),
+    description: description?.trim() || "",
     module,
-    files,
-    links: links,
+    files: filesData,
+    links: parsedLinks,
     uploadedBy: req.user._id,
   });
 
+
+  const responseData = {
+    ...createdResource.toJSON(),
+    filesCount: createdResource.files.length,
+    linksCount: createdResource.links.length,
+  };
+
   return res
     .status(200)
-    .json(new ApiResponse(200, createdResource, "Resource created."));
+    .json(new ApiResponse(200, responseData, "Resource created."));
 });
 
 const getResourcesByModule = asyncHandler(async (req, res) => {
@@ -48,14 +70,24 @@ const getResourcesByModule = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Module not found!!");
   }
 
-  const resources = await Resource.find({ module });
+  const resources = await Resource.aggregate([
+    { $match: { module: new mongoose.Types.ObjectId(module) } },
+    {
+      $project: {
+        _id: 1,
+        title: 1,
+        filesCount: { $size: { $ifNull: ["$files", []] } },
+        linksCount: { $size: { $ifNull: ["$links", []] } },
+      },
+    },
+  ]);
 
   return res.status(200).json(new ApiResponse(200, resources, "Resources fetched."));
 });
 const getResourceById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const resource = await Resource.findById(id);
+  const resource = await Resource.findById(id).select("-files.data");
 
   if (!resource) {
     throw new ApiError(404, "Resource not found!!");
@@ -66,7 +98,7 @@ const getResourceById = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, resource, "Resource fetched."));
 });
 const updateResource = asyncHandler(async (req, res) => {
-  const { title, description, filePath, text } = req.body;
+  const { title, description, links } = req.body;
   const { id } = req.params;
 
   const resource = await Resource.findById(id);
@@ -75,41 +107,57 @@ const updateResource = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Resource not found!!");
   }
 
-  if (title != undefined) {
+  if (title !== undefined) {
     if (!title.trim()) {
       throw new ApiError(400, "Resource title cannot be empty");
     }
-    resource.title = title;
+    resource.title = title.trim();
   }
 
-  if (description != undefined) {
-    if (!description.trim()) {
-      throw new ApiError(400, "Resource description cannot be empty");
+  if (description !== undefined) {
+    resource.description = description.trim();
+  }
+
+  if (links !== undefined) {
+    const parsedLinks = typeof links === "string" ? JSON.parse(links) : links;
+    if (!Array.isArray(parsedLinks)) {
+      throw new ApiError(400, "Links can only be in an array!!");
     }
-    resource.description = description;
+    resource.links = parsedLinks;
   }
 
-  if (text != undefined) {
-    if (!text.trim()) {
-      throw new ApiError(400, "Resource text cannot be empty");
+  if (req.body.remainingFiles !== undefined) {
+    const remaining = typeof req.body.remainingFiles === "string" ? JSON.parse(req.body.remainingFiles) : req.body.remainingFiles;
+    if (Array.isArray(remaining)) {
+      resource.files = resource.files.filter((f) => remaining.includes(f._id.toString()));
     }
-    resource.text = text;
   }
 
-  if (!Array.isArray(filePath)) {
-    throw new ApiError(400, "File paths can only be in an array!!");
+  const uploadedFiles = req.files || [];
+  if (uploadedFiles.length > 0) {
+    const newFilesData = uploadedFiles.map((file) => ({
+      name: file.originalname,
+      data: file.buffer,
+      contentType: file.mimetype,
+    }));
+    resource.files.push(...newFilesData); // append, don't overwrite
   }
 
-  if (!text?.trim() && filePath.length == 0) {
+  if (resource.links.length === 0 && resource.files.length === 0) {
     throw new ApiError(400, "Resource cannot be empty!!");
   }
 
-  resource.filePath = filePath;
   await resource.save();
+
+  const responseData = {
+    ...resource.toJSON(),
+    filesCount: resource.files.length,
+    linksCount: resource.links.length,
+  };
 
   return res
     .status(200)
-    .json(new ApiResponse(200, resource, "Resource updated."));
+    .json(new ApiResponse(200, responseData, "Resource updated."));
 });
 
 const removeResource = asyncHandler(async (req, res) => {
@@ -126,10 +174,36 @@ const removeResource = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, null, "Resource deleted successfully."));
 });
 
+const getResourceFile = asyncHandler(async (req, res) => {
+  const { id, index } = req.params;
+
+  const resource = await Resource.findById(id);
+
+  if (!resource) {
+    throw new ApiError(404, "Resource not found!!");
+  }
+
+  const idx = parseInt(index, 10);
+  if (isNaN(idx) || idx < 0 || idx >= resource.files.length) {
+    throw new ApiError(404, "File not found!!");
+  }
+
+  const file = resource.files[idx];
+
+  res.setHeader("Content-Type", file.contentType);
+  res.setHeader(
+    "Content-Disposition",
+    `inline; filename="${encodeURIComponent(file.name)}"`
+  );
+
+  return res.status(200).send(file.data);
+});
+
 export {
   addResource,
   getResourcesByModule,
   getResourceById,
   updateResource,
   removeResource,
+  getResourceFile,
 };

@@ -31,6 +31,11 @@ const userSchema = new mongoose.Schema(
       ref: "Batch",
       default: null,
     },
+    college: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "College",
+      default: null,
+    },
     mentorBatches: [
       {
         type: mongoose.Schema.Types.ObjectId,

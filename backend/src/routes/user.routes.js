@@ -6,6 +6,7 @@ import {
   updateUser,
   deleteUser,
   toggleIsActive,
+  getAllInternsByBatch,
 } from "../controllers/user.controllers.js";
 import { verifyJWT } from "../middlewares/auth.middlewares.js";
 import { authorizePermissions } from "../middlewares/authorizePermissions.middlewares.js";
@@ -28,5 +29,6 @@ router
 router
   .route("/delete/:id")
   .delete(authorizePermissions("user:delete"), deleteUser);
+router.route("/list-interns/:batchId").get(authorizePermissions("batch:read"), getAllInternsByBatch);
 
 export default router;

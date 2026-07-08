@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useSelector } from "react-redux";
 import {
   getAllUsers,
+  getUserById,
   createUser,
   updateUser,
   toggleUserActive,
@@ -9,6 +11,7 @@ import {
   getAllBatches,
   getAllPrograms,
 } from "@/features/users/userApi";
+import { getAllColleges } from "@/features/colleges/collegeApi";
 import { usePermission } from "@/hooks/usePermission";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,15 +59,18 @@ const initialForm = {
   program: [],
   batch: "",
   mentorBatches: [],
+  college: "",
 };
 
 const UsersPage = () => {
   const { hasPermission } = usePermission();
+  const currentUser = useSelector((state) => state.auth.user);
 
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [batches, setBatches] = useState([]);
   const [programs, setPrograms] = useState([]);
+  const [colleges, setColleges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -87,16 +93,18 @@ const UsersPage = () => {
     setLoading(true);
     setError("");
     try {
-      const [usersRes, rolesRes, batchesRes, programRes] = await Promise.all([
+      const [usersRes, rolesRes, batchesRes, programRes, collegesRes] = await Promise.all([
         getAllUsers(),
         getAllRoles(),
         getAllBatches(),
         getAllPrograms(),
+        getAllColleges(),
       ]);
       setUsers(usersRes.data.data);
       setRoles(rolesRes.data.data);
       setBatches(batchesRes.data.data);
       setPrograms(programRes.data.data);
+      setColleges(collegesRes.data.data || []);
     } catch {
       setError("Failed to fetch data. Please try again.");
     } finally {
@@ -170,14 +178,18 @@ const UsersPage = () => {
   };
 
   // open edit modal
-  const openEditModal = (user) => {
+  const openEditModal = async(user) => {
     setEditTarget(user);
+    const response = await getUserById(user._id);
+    const userData = response.data.data;
     setFormData({
-      username: user.username,
-      role: user.role?._id,
-      program: user.program?.map((p) => p._id) || [],
-      batch: user.batch?._id || `${user.role.name === "Intern" ? "None" : ""}`,
-      mentorBatches: user.mentorBatches?.map((b) => b._id) || [],
+      username: userData.username,
+      role: userData.role?._id,
+      email: userData.email,
+      program: userData.program?.map((p) => p._id) || [],
+      batch: userData.batch?._id || `${userData.role.name === "Intern" ? "None" : ""}`,
+      mentorBatches: userData.mentorBatches?.map((b) => b._id) || [],
+      college: userData.college?._id || "None",
     });
     setFormError("");
     setModalOpen(true);
@@ -187,7 +199,7 @@ const UsersPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (editTarget && (!formData.username.trim() || !formData.role)) {
+    if (editTarget && (!formData.username.trim() || !formData.role || !formData.email.trim())) {
       setFormError("All fields are required");
       return;
     }
@@ -208,19 +220,24 @@ const UsersPage = () => {
     if(formData.batch === "None"){
       formData.batch = "";
     }
+    if(formData.college === "None"){
+      formData.college = "";
+    }
     if(formData.batch !== ""){
       formData.program = [];
     }
     try {
+      let response;
       if (!editTarget) {
-        await createUser(formData);
+        response = await createUser(formData);
+        setUsers((prev) => [...prev, response.data.data]);
       } else {
-        const { email, password, ...editData } = formData;
-        await updateUser(editTarget._id, editData);
+        const { password, ...editData } = formData;
+        response = await updateUser(editTarget._id, editData);
+        setUsers((prev) => prev.map((user) => user._id === editTarget._id ? response.data.data : user));
       }
       setModalOpen(false);
       setFormData(initialForm);
-      fetchData(); // refresh list
     } catch (err) {
       setFormError(
         err.response?.data?.message ||
@@ -234,13 +251,27 @@ const UsersPage = () => {
   // toggle active/inactive
   const handleToggleActive = async (_id) => {
     setTogglingId(_id);
+    const user = users.find((user) => user._id === _id);
+    const targetIsActive = user?.isActive;
     try {
       await toggleUserActive(_id);
-      fetchData();
+      setUsers((prev) => prev.map((user) => {
+        if (user._id === _id) {
+          return { ...user, isActive: !user.isActive };
+        }
+        return user;
+      }));
     } catch (err) {
       console.log(err);
+      setUsers((prev) => prev.map((user) => {
+        if (user._id === _id) {
+          return { ...user, isActive: targetIsActive };
+        }
+        return user;
+      }));
     } finally {
       setTogglingId(null);
+
     }
   };
 
@@ -251,7 +282,7 @@ const UsersPage = () => {
     try {
       await deleteUser(deleteTarget._id);
       setDeleteTarget(null);
-      fetchData();
+      setUsers((prev) => prev.filter((user) => user._id !== deleteTarget._id));
     } catch (error) {
       console.log(error.message);
     } finally {
@@ -332,8 +363,8 @@ const UsersPage = () => {
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       {/* toggle active */}
-                      {hasPermission("user:update") &&
-                        !user.role?.isSystemRole && (
+                      {((hasPermission("user:update") &&
+                        !user.role?.isSystemRole) || currentUser?.role?.name === "Super Admin") && (
                           <Button
                             variant="secondary"
                             size="sm"
@@ -345,8 +376,8 @@ const UsersPage = () => {
                         )}
 
                       {/* toggle active */}
-                      {hasPermission("user:update") &&
-                        !user.role?.isSystemRole && (
+                      {((hasPermission("user:update") &&
+                        !user.role?.isSystemRole) || currentUser?.role?.name === "Super Admin") && (
                           <Button
                             variant="secondary"
                             size="sm"
@@ -365,18 +396,17 @@ const UsersPage = () => {
                         )}
 
                       {/* delete */}
-                      {hasPermission("user:delete") &&
-                        !user.role?.isSystemRole && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => setDeleteTarget(user)}
+                      {((hasPermission("user:delete") && !user.role?.isSystemRole) || currentUser?.role?.name === "Super Admin") && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setDeleteTarget(user)}
                             title="Delete user"
                           >
                             <Trash2 size={15} className="text-destructive" />
                           </Button>
                         )}
-                      {user.role?.isSystemRole && (
+                      {user.role?.isSystemRole && currentUser?.role?.name !== "Super Admin" && (
                         <span className="text-xs text-muted-foreground pr-2">
                           Protected
                         </span>
@@ -429,7 +459,7 @@ const UsersPage = () => {
                 disabled={formLoading}
               />
             </div>
-            {!editTarget && (
+            {(!editTarget || hasPermission("email:update")) && (
               <div className="space-y-2">
                 <Label>Email</Label>
                 <Input
@@ -456,7 +486,7 @@ const UsersPage = () => {
                 />
               </div>
             )}
-            <div className="flex justify-between">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Role</Label>
                 <Select
@@ -500,6 +530,29 @@ const UsersPage = () => {
                 </div>
               )}
             </div>
+
+            {formData.role === getRoleId("Intern") && (
+              <div className="space-y-2">
+                <Label>College</Label>
+                <Select
+                  value={formData.college || "None"}
+                  onValueChange={(val) => setFormData((prev) => ({ ...prev, college: val }))}
+                  disabled={formLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a College" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={"None"}>None</SelectItem>
+                    {colleges.map((college) => (
+                      <SelectItem key={college._id} value={college._id}>
+                        {college.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {formData.role === getRoleId("Mentor") && (
               <div className="space-y-2">

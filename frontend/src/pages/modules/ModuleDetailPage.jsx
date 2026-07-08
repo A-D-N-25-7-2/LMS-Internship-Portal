@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   getResourcesByModule,
+  getResourceById,
   createResource,
   updateResource,
   deleteResource,
@@ -12,10 +13,12 @@ import {
   updateAssignment,
   deleteAssignment,
 } from "@/features/assignments/assignmentApi";
+import { getAllBatches } from "@/features/batches/batchApi";
 import { getModuleById } from "@/features/modules/moduleApi";
 import { usePermission } from "@/hooks/usePermission";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -36,6 +39,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ArrowLeft,
   Plus,
   Pencil,
@@ -43,9 +53,7 @@ import {
   Loader2,
   FileText,
   ClipboardList,
-  Link,
-  File,
-  ChevronRight,
+  ChevronRight,X
 } from "lucide-react";
 
 // ─── Resources Section ───────────────────────────────────────────
@@ -60,7 +68,7 @@ const ResourcesSection = ({ moduleId, navigate }) => {
   const [editTarget, setEditTarget] = useState(null);
   const [formData, setFormData] = useState({ title: "", description: "" });
   const [files, setFiles] = useState([]);
-  const [links, setLinks] = useState([{ name: "", value: "" }]);
+  const [links, setLinks] = useState([{ label: "", link: "" }]);
   const [formError, setFormError] = useState("");
   const [formLoading, setFormLoading] = useState(false);
 
@@ -88,32 +96,36 @@ const ResourcesSection = ({ moduleId, navigate }) => {
     setEditTarget(null);
     setFormData({ title: "", description: "" });
     setFiles([]);
-    setLinks([{ name: "", value: "" }]);
+    setLinks([{ label: "", link: "" }]);
     setFormError("");
     setModalOpen(true);
   };
 
-  const openEditModal = (resource) => {
+  const openEditModal = async(resource) => {
     setEditTarget(resource);
+    const { data } = await getResourceById(resource._id);
+    const fetchedResource = data?.data;
     setFormData({
-      title: resource.title,
-      description: resource.description || "",
+      title: fetchedResource?.title,
+      description: fetchedResource?.description || "",
     });
-    setFiles([]);
-    setLinks(
-      resource.links?.length > 0 ? resource.links : [{ name: "", value: "" }],
-    );
+    setFiles(fetchedResource?.files || []);
+     setLinks(
+       fetchedResource?.links?.length > 0
+         ? fetchedResource.links
+         : [{ label: "", link: "" }],
+     );
     setFormError("");
     setModalOpen(true);
   };
 
   const handleAddLink = () =>
-    setLinks((prev) => [...prev, { name: "", value: "" }]);
+    setLinks((prev) => [...prev, { label: "", link: "" }]);
   const handleRemoveLink = (i) =>
     setLinks((prev) => prev.filter((_, idx) => idx !== i));
-  const handleLinkChange = (i, field, value) => {
+  const handleLinkChange = (i, field, link) => {
     setLinks((prev) =>
-      prev.map((l, idx) => (idx === i ? { ...l, [field]: value } : l)),
+      prev.map((l, idx) => (idx === i ? { ...l, [field]: link } : l)),
     );
   };
 
@@ -124,7 +136,7 @@ const ResourcesSection = ({ moduleId, navigate }) => {
       return;
     }
 
-    const validLinks = links.filter((l) => l.value.trim());
+    const validLinks = links.filter((l) => l.link.trim());
 
     if (!editTarget && files.length === 0 && validLinks.length === 0) {
       setFormError("At least one file or link is required");
@@ -139,17 +151,26 @@ const ResourcesSection = ({ moduleId, navigate }) => {
       form.append("title", formData.title.trim());
       form.append("description", formData.description.trim());
       if (!editTarget) form.append("module", moduleId);
-      files.forEach((file) => form.append("files", file));
+      files.filter(file => file instanceof File).forEach((file) => form.append("files", file));
       form.append("links", JSON.stringify(validLinks));
-
       if (editTarget) {
-        await updateResource(editTarget._id, form);
+        const remainingDbFileIds = files.filter(file => !(file instanceof File)).map(file => file._id);
+        form.append("remainingFiles", JSON.stringify(remainingDbFileIds));
+      }
+
+      let response;
+      if (editTarget) {
+        response = await updateResource(editTarget._id, form);
       } else {
-        await createResource(form);
+        response = await createResource(moduleId, form);
       }
 
       setModalOpen(false);
-      fetchResources();
+      if(editTarget){
+        setResources((prev) => prev.map((resource) => resource._id === editTarget._id ? response.data.data : resource));
+      } else {
+        setResources((prev) => [...prev, response.data.data]);
+      }
     } catch (err) {
       setFormError(err.response?.data?.message || "Operation failed");
     } finally {
@@ -162,7 +183,7 @@ const ResourcesSection = ({ moduleId, navigate }) => {
     try {
       await deleteResource(deleteTarget._id);
       setDeleteTarget(null);
-      fetchResources();
+      setResources((prev) => prev.filter((r) => r._id !== deleteTarget._id));
     } catch (err) {
       setError(err.response?.data?.message || "Failed to delete resource");
       setDeleteTarget(null);
@@ -211,16 +232,13 @@ const ResourcesSection = ({ moduleId, navigate }) => {
       ) : (
         <div className="grid grid-cols-1 gap-3">
           {resources.map((resource) => {
-            const hasFiles = resource.files?.length > 0;
-            const hasLinks = resource.links?.length > 0;
-
             return (
               <div
                 key={resource._id}
                 onClick={() =>
-                  navigate(`/modules/${moduleId}/resources/${resource._id}`)
+                  navigate(`/programs/modules/${moduleId}/resources/${resource._id}`)
                 }
-                className="cursor-pointer border rounded-xl p-4 hover:border-primary hover:shadow-sm transition-all bg-background group"
+                className="cursor-pointer border rounded-xl hover:scale-102 p-4 hover:border-primary hover:shadow-sm transition-all duration-200 bg-background group"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -231,24 +249,15 @@ const ResourcesSection = ({ moduleId, navigate }) => {
                       <p className="font-medium text-foreground text-sm truncate">
                         {resource.title}
                       </p>
-                      {resource.description && (
-                        <p className="text-muted-foreground text-xs mt-0.5 line-clamp-2">
-                          {resource.description}
-                        </p>
-                      )}
                       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        {hasFiles && (
                           <Badge variant="secondary" className="text-xs">
-                            {resource.files.length} file
-                            {resource.files.length > 1 ? "s" : ""}
+                            {resource.filesCount} file
+                            {resource.filesCount > 1 ? "s" : ""}
                           </Badge>
-                        )}
-                        {hasLinks && (
                           <Badge variant="outline" className="text-xs">
-                            {resource.links.length} link
-                            {resource.links.length > 1 ? "s" : ""}
+                            {resource.linksCount} link
+                            {resource.linksCount > 1 ? "s" : ""}
                           </Badge>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -324,7 +333,7 @@ const ResourcesSection = ({ moduleId, navigate }) => {
                   (optional)
                 </span>
               </Label>
-              <Input
+              <Textarea
                 value={formData.description}
                 onChange={(e) =>
                   setFormData((p) => ({ ...p, description: e.target.value }))
@@ -344,15 +353,26 @@ const ResourcesSection = ({ moduleId, navigate }) => {
               <input
                 type="file"
                 multiple
-                onChange={(e) => setFiles(Array.from(e.target.files))}
+                onChange={(e) =>
+                  setFiles((prev) => [...prev, ...Array.from(e.target.files)])
+                }
                 disabled={formLoading}
                 className="text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-border file:text-sm file:bg-background file:text-foreground hover:file:bg-accent cursor-pointer w-full"
               />
               {files.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-1">
                   {files.map((f, i) => (
-                    <Badge key={i} variant="secondary" className="text-xs">
+                    <Badge key={f._id || `new-${i}`} variant="secondary" className="text-xs">
                       {f.name}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFiles((prev) => prev.filter((_, idx) => idx !== i))
+                        }
+                        disabled={formLoading}
+                      >
+                        <X size={12} />
+                      </button>
                     </Badge>
                   ))}
                 </div>
@@ -385,18 +405,18 @@ const ResourcesSection = ({ moduleId, navigate }) => {
                 <div key={i} className="flex gap-2 items-start">
                   <Input
                     placeholder="Label"
-                    value={link.name}
+                    value={link.label}
                     onChange={(e) =>
-                      handleLinkChange(i, "name", e.target.value)
+                      handleLinkChange(i, "label", e.target.value)
                     }
                     disabled={formLoading}
                     className="flex-1"
                   />
                   <Input
                     placeholder="URL or text"
-                    value={link.value}
+                    value={link.link}
                     onChange={(e) =>
-                      handleLinkChange(i, "value", e.target.value)
+                      handleLinkChange(i, "link", e.target.value)
                     }
                     disabled={formLoading}
                     className="flex-1"
@@ -476,12 +496,24 @@ const ResourcesSection = ({ moduleId, navigate }) => {
   );
 };
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
 // ─── Assignments Section ─────────────────────────────────────────
-const AssignmentsSection = ({ moduleId, navigate }) => {
+const AssignmentsSection = ({ moduleId, programId, navigate }) => {
   const { hasPermission } = usePermission();
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [batches, setBatches] = useState([]);
 
   // create/edit modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -490,6 +522,7 @@ const AssignmentsSection = ({ moduleId, navigate }) => {
     title: "",
     description: "",
     totalMarks: "100",
+    batch: "",
     dueDate: "",
   });
   const [formError, setFormError] = useState("");
@@ -505,6 +538,11 @@ const AssignmentsSection = ({ moduleId, navigate }) => {
       const { data } = await getAssignmentsByModule(moduleId);
       setAssignments(data.data);
       setError("");
+
+      if (hasPermission("assignment:create") || hasPermission("assignment:update")) {
+        const { data: batchesData } = await getAllBatches(programId);
+        setBatches(batchesData.data);
+      }
     } catch {
       setError("Failed to fetch assignments.");
     } finally {
@@ -518,7 +556,7 @@ const AssignmentsSection = ({ moduleId, navigate }) => {
 
   const openCreateModal = () => {
     setEditTarget(null);
-    setFormData({ title: "", description: "", totalMarks: "100", dueDate: "" });
+    setFormData({ title: "", description: "", totalMarks: "100", batch: "none", dueDate: "" });
     setFormError("");
     setModalOpen(true);
   };
@@ -529,6 +567,7 @@ const AssignmentsSection = ({ moduleId, navigate }) => {
       title: assignment.title,
       description: assignment.description || "",
       totalMarks: assignment.totalMarks?.toString() || "100",
+      batch: assignment.batch?._id || assignment.batch || "none",
       dueDate: assignment.dueDate?.split("T")[0] || "",
     });
     setFormError("");
@@ -550,22 +589,29 @@ const AssignmentsSection = ({ moduleId, navigate }) => {
     setFormError("");
 
     try {
+      const isNoBatch = formData.batch === "none" || !formData.batch;
       const payload = {
         title: formData.title.trim(),
         description: formData.description.trim(),
         totalMarks: Number(formData.totalMarks),
-        dueDate: formData.dueDate,
+        batch: isNoBatch ? null : formData.batch,
+        dueDate: isNoBatch ? null : formData.dueDate,
         ...(!editTarget && { module: moduleId }),
       };
 
+      let response;
       if (editTarget) {
-        await updateAssignment(editTarget._id, payload);
+       response = await updateAssignment(editTarget._id, payload);
       } else {
-        await createAssignment(moduleId ,payload);
+        response = await createAssignment(moduleId ,payload);
       }
 
       setModalOpen(false);
-      fetchAssignments();
+      if(editTarget){
+        setAssignments((prev) => prev.map((assignment) => assignment._id === editTarget._id ? response.data.data : assignment));
+      } else {
+        setAssignments((prev) => [...prev, response.data.data]);
+      }
     } catch (err) {
       setFormError(err.response?.data?.message || "Operation failed");
     } finally {
@@ -578,7 +624,7 @@ const AssignmentsSection = ({ moduleId, navigate }) => {
     try {
       await deleteAssignment(deleteTarget._id);
       setDeleteTarget(null);
-      fetchAssignments();
+      setAssignments((prev) => prev.filter((a) => a._id !== deleteTarget._id));
     } catch (err) {
       setError(err.response?.data?.message || "Failed to delete assignment");
       setDeleteTarget(null);
@@ -632,7 +678,7 @@ const AssignmentsSection = ({ moduleId, navigate }) => {
               onClick={() =>
                 navigate(`/modules/${moduleId}/assignments/${assignment._id}`)
               }
-              className="cursor-pointer border rounded-xl p-4 hover:border-primary hover:shadow-sm transition-all bg-background group w-full"
+              className="cursor-pointer hover:scale-102 border rounded-xl p-4 hover:border-primary hover:shadow-sm transition-all duration-200 bg-background group w-full"
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -643,6 +689,29 @@ const AssignmentsSection = ({ moduleId, navigate }) => {
                     <p className="font-medium text-foreground text-sm truncate">
                       {assignment.title}
                     </p>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-xs text-muted-foreground">
+                      {assignment.createdBy?.username && (
+                        <span>
+                          Created by: <span className="font-medium text-foreground">{assignment.createdBy.username}</span>
+                        </span>
+                      )}
+                      {assignment.batch?.name && (
+                        <>
+                          <span className="hidden sm:inline text-muted-foreground/50">•</span>
+                          <span>
+                            Batch: <span className="font-medium text-foreground">{assignment.batch.name}</span>
+                          </span>
+                        </>
+                      )}
+                      {assignment.dueDate && (
+                        <>
+                          <span className="hidden sm:inline text-muted-foreground/50">•</span>
+                          <span>
+                            Due: <span className="font-medium text-foreground">{formatDate(assignment.dueDate)}</span>
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -728,7 +797,7 @@ const AssignmentsSection = ({ moduleId, navigate }) => {
                   (optional)
                 </span>
               </Label>
-              <textarea
+              <Textarea
                 value={formData.description}
                 onChange={(e) =>
                   setFormData((p) => ({ ...p, description: e.target.value }))
@@ -740,18 +809,44 @@ const AssignmentsSection = ({ moduleId, navigate }) => {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>
-                due Date{" "}
-              </Label>
-              <Input
-                type="date"
-                value={formData.dueDate}
-                onChange={(e) =>
-                  setFormData((p) => ({ ...p, dueDate: e.target.value }))
-                }
-                disabled={formLoading}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Batch</Label>
+                <Select
+                  value={formData.batch}
+                  onValueChange={(value) =>
+                    setFormData((p) => ({
+                      ...p,
+                      batch: value,
+                      dueDate: value === "none" || !value ? "" : p.dueDate,
+                    }))
+                  }
+                  disabled={formLoading}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a batch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None (No Batch)</SelectItem>
+                    {batches.map((batch) => (
+                      <SelectItem key={batch._id} value={batch._id}>
+                        {batch.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Due-Date</Label>
+                <Input
+                  type="date"
+                  value={formData.dueDate}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, dueDate: e.target.value }))
+                  }
+                  disabled={formLoading || !formData.batch || formData.batch === "none"}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -830,7 +925,7 @@ const AssignmentsSection = ({ moduleId, navigate }) => {
 
 // ─── Main ModuleDetailPage ───────────────────────────────────────
 const ModuleDetailPage = () => {
-  const { moduleId } = useParams();
+  const { programId, moduleId } = useParams();
   const navigate = useNavigate();
 
   const [module, setModule] = useState(null);
@@ -861,33 +956,35 @@ const ModuleDetailPage = () => {
   if (!module) return null;
 
   return (
-    <div className="space-y-8">
-      {/* header */}
-      <div className="flex items-start gap-3">
+    <div className="space-y-6">
+      {/* Back Button */}
+      <div>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => navigate(-1)}
-          className="mt-1"
+          className="-ml-2 text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft size={16} className="mr-1" />
-          Back
+          <ArrowLeft size={16} className="mr-1.5" />
+          Back to Modules
         </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">{module.name}</h1>
-          {module.description && (
-            <p className="text-muted-foreground text-sm mt-1">
-              {module.description}
-            </p>
-          )}
-        </div>
+      </div>
+
+      {/* Header Details */}
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">{module.name}</h1>
+        {module.description && (
+          <p className="text-muted-foreground text-sm mt-1">
+            {module.description}
+          </p>
+        )}
       </div>
 
       <ResourcesSection moduleId={moduleId} navigate={navigate} />
 
       <div className="border-t" />
 
-      <AssignmentsSection moduleId={moduleId} navigate={navigate} />
+      <AssignmentsSection moduleId={moduleId} programId={programId} navigate={navigate} />
     </div>
   );
 };

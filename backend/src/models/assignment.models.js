@@ -21,13 +21,15 @@ const assignmentSchema = new Schema(
       ref: "User",
       required: true,
     },
+    batch: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Batch",
+    },
     dueDate: {
       type: Date,
-      required: true,
     },
     totalMarks: {
       type: Number,
-      required: true,
       default: 100,
     },
   },

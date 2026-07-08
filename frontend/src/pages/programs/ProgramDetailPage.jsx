@@ -13,10 +13,10 @@ import {
   createModule,
   getAllModules,
 } from "@/features/modules/moduleApi";
-import { getAllUsers } from "@/features/users/userApi";
 import { usePermission } from "@/hooks/usePermission";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -46,13 +46,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   ArrowLeft,
   Plus,
   Pencil,
@@ -60,6 +53,7 @@ import {
   Loader2,
   Users,
   Layers,
+  LibraryBig,
 } from "lucide-react";
 
 // ─── Modules Tab ────────────────────────────────────────────────
@@ -132,14 +126,24 @@ const ModulesTab = ({ programId, navigate }) => {
         order: Number(formData.order),
         ...(!editTarget && { program: programId }),
       };
-
+      let response;
       if (editTarget) {
-        await updateModule(editTarget._id, payload);
+        response = await updateModule(editTarget._id, payload);
       } else {
-        await createModule(payload);
+        response = await createModule(payload);
       }
       setModalOpen(false);
-      fetchModules();
+      if (editTarget) {
+        setModules((prev) =>
+          prev
+            .map((module) => (module._id === editTarget._id ? response.data.data : module))
+            .sort((a, b) => a.order - b.order)
+        );
+      } else {
+        setModules((prev) =>
+          [...prev, response.data.data].sort((a, b) => a.order - b.order)
+        );
+      }
     } catch (err) {
       setFormError(err.response?.data?.message || "Operation failed");
     } finally {
@@ -152,7 +156,7 @@ const ModulesTab = ({ programId, navigate }) => {
     try {
       await deleteModule(deleteTarget._id);
       setDeleteTarget(null);
-      fetchModules();
+      setModules((prev) => prev.filter((module) => module._id !== deleteTarget._id));
     } catch (err) {
       setError(err.response?.data?.message || "Failed to delete");
       setDeleteTarget(null);
@@ -196,63 +200,62 @@ const ModulesTab = ({ programId, navigate }) => {
           No modules yet. Add one to get started.
         </div>
       ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Order</TableHead>
-                <TableHead>Module Name</TableHead>
-                <TableHead>Description</TableHead>
-                {showActions && (
-                  <TableHead className="text-right">Actions</TableHead>
-                )}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {modules.map((module) => (
-                <TableRow
-                  key={module._id}
-                  className="cursor-pointer hover:bg-accent/50"
-                  onClick={() => navigate(`/modules/${module._id}`)}
-                >
-                  <TableCell>
-                    <Badge variant="outline">#{module.order}</Badge>
-                  </TableCell>
-                  <TableCell className="font-medium">{module.name}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {module.description || "—"}
-                  </TableCell>
+        <div className="grid grid-cols-1 gap-3">
+          {modules.map((module) => {
+            return (
+              <div
+                key={module._id}
+                onClick={() =>
+                  navigate(`/programs/${programId}/modules/${module._id}`)
+                }
+                className="cursor-pointer border hover:scale-102 rounded-xl p-4 hover:border-primary hover:shadow-sm transition-all duration-200 bg-background group"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5 font-mono text-sm font-semibold text-primary">
+                      #{module.order}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-foreground text-sm truncate">
+                        {module.name}
+                      </p>
+                      {module.description && (
+                        <p className="text-muted-foreground text-xs mt-1 truncate">
+                          {module.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
                   {showActions && (
-                    <TableCell className="text-right">
-                      <div
-                        className="flex justify-end gap-2"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {hasPermission("module:update") && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => openEditModal(module)}
-                          >
-                            <Pencil size={14} />
-                          </Button>
-                        )}
-                        {hasPermission("module:delete") && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => setDeleteTarget(module)}
-                          >
-                            <Trash2 size={14} />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
+                    <div
+                      className="flex items-center gap-1 shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {hasPermission("module:update") && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => openEditModal(module)}
+                        >
+                          <Pencil size={14} />
+                        </Button>
+                      )}
+                      {hasPermission("module:delete") && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => setDeleteTarget(module)}
+                        >
+                          <Trash2 size={14} className="text-destructive" />
+                        </Button>
+                      )}
+                    </div>
                   )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -298,7 +301,7 @@ const ModulesTab = ({ programId, navigate }) => {
                   (optional)
                 </span>
               </Label>
-              <Input
+              <Textarea
                 value={formData.description}
                 onChange={(e) =>
                   setFormData((p) => ({ ...p, description: e.target.value }))
@@ -385,6 +388,7 @@ const ModulesTab = ({ programId, navigate }) => {
 // ─── Batches Tab ────────────────────────────────────────────────
 const BatchesTab = ({ programId }) => {
   const { hasPermission } = usePermission();
+  const navigate = useNavigate();
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -485,7 +489,7 @@ const BatchesTab = ({ programId }) => {
     try {
       await deleteBatch(deleteTarget._id);
       setDeleteTarget(null);
-      fetchBatches();
+      setBatches((prev) => prev.filter((batch) => batch._id !== deleteTarget._id));
     } catch (err) {
       setError(err.response?.data?.message || "Failed to delete batch");
       setDeleteTarget(null);
@@ -563,7 +567,7 @@ const BatchesTab = ({ programId }) => {
             </TableHeader>
             <TableBody>
               {batches.map((batch) => (
-                <TableRow key={batch._id}>
+                <TableRow key={batch._id} onClick={() => navigate(`/programs/${programId}/batches/${batch._id}`)} className="cursor-pointer hover:bg-accent/50">
                   <TableCell className="font-medium">{batch.name}</TableCell>
                   <TableCell>
                     <Badge
@@ -588,7 +592,7 @@ const BatchesTab = ({ programId }) => {
                   </TableCell>
                   {showActions && (
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                         {hasPermission("batch:update") && (
                           <Button
                             variant="secondary"
@@ -775,33 +779,35 @@ const ProgramDetailPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* header */}
-      <div className="flex items-start gap-4">
+      {/* Back Button */}
+      <div>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => navigate("/programs")}
-          className="mt-1"
+          className="-ml-2 text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft size={16} className="mr-1" />
-          Back
+          <ArrowLeft size={16} className="mr-1.5" />
+          Back to Programs
         </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">{program.name}</h1>
-          {program.description && (
-            <p className="text-muted-foreground text-sm mt-1">
-              {program.description}
-            </p>
-          )}
-        </div>
+      </div>
+
+      {/* Header Details */}
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">{program.name}</h1>
+        {program.description && (
+          <p className="text-muted-foreground text-sm mt-1">
+            {program.description}
+          </p>
+        )}
       </div>
 
       {/* tabs */}
-      <Tabs defaultValue="modules">
+      <Tabs defaultValue={hasPermission("module:read") ? "modules" : "batches"}>
         <TabsList>
           {hasPermission("module:read") && (
             <TabsTrigger value="modules" className="flex items-center gap-2">
-              <Layers size={15} />
+              <LibraryBig size={15} />
               Modules
             </TabsTrigger>
           )}

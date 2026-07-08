@@ -1,6 +1,7 @@
 import api from "@/services/api";
 
 export const getAllUsers = () => api.get("/users/list");
+export const getUserById = (id) => api.get(`/users/get-user/${id}`);
 export const createUser = (data) => api.post("/users/create", data);
 export const updateUser = (id, data) => api.patch(`/users/update/${id}`, data);
 export const toggleUserActive = (id) =>

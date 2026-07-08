@@ -18,17 +18,21 @@ const resourceSchema = new Schema(
     },
     files: [
       {
-        type: String,
+        name: { type: String, required: true },
+        data: { type: Buffer, required: true },
+        contentType: { type: String, required: true },
       },
     ],
-    links: [{
-      label: {
-        type: String
+    links: [
+      {
+        label: {
+          type: String,
+        },
+        link: {
+          type: String,
+        },
       },
-      link: {
-        type: String
-      }
-    }],
+    ],
     uploadedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

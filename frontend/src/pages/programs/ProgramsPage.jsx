@@ -97,14 +97,16 @@ const ProgramsPage = () => {
     }
     setFormLoading(true);
     setFormError("");
+    let response;
     try {
       if (editTarget) {
-        await updateProgram(editTarget._id, formData);
+        response = await updateProgram(editTarget._id, formData);
+        setPrograms((prev) => prev.map((program) => program._id === editTarget._id ? response.data.data : program));
       } else {
-        await createProgram(formData);
+        response = await createProgram(formData);
+        setPrograms((prev) => [...prev, response.data.data]);
       }
       setModalOpen(false);
-      fetchPrograms();
     } catch (err) {
       setFormError(err.response?.data?.message || "Operation failed");
     } finally {
@@ -118,7 +120,7 @@ const ProgramsPage = () => {
     try {
       await deleteProgram(deleteTarget._id);
       setDeleteTarget(null);
-      fetchPrograms();
+      setPrograms((prev) => prev.filter((program) => program._id !== deleteTarget._id));
     } catch (err) {
       setError(err.response?.data?.message || "Failed to delete program");
       setDeleteTarget(null);
@@ -165,6 +167,7 @@ const ProgramsPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {programs.map((program) => {
             return (
+              <div key={program._id} className="relative rounded-xl hover:border-primary border hover:scale-103 transition-all duration-200 group">
               <Card
                 key={program._id}
                 onClick={() => {
@@ -179,7 +182,7 @@ const ProgramsPage = () => {
               >
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
-                    <CardTitle className="text-base font-semibold group-hover:text-primary transition-colors trunk line-clamp-1">
+                    <CardTitle className="text-base font-semibold  group-hover:text-primary transition-colors trunk line-clamp-1">
                       {program.name}
                     </CardTitle>
                     <div className="flex gap-1">
@@ -269,6 +272,7 @@ const ProgramsPage = () => {
                   </div>
                 </CardContent>
               </Card>
+              </div>
             );
           })}
         </div>

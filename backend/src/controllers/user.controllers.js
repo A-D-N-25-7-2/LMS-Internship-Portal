@@ -5,10 +5,10 @@ import { Program } from "../models/program.models.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { cookieOptions } from "../constants.js";
+import { College } from "../models/college.models.js";
 
 const createUser = asyncHandler(async (req, res) => {
-  const { username, email, password, role, batch, mentorBatches } = req.body;
+  const { username, email, password, role, batch, mentorBatches, college } = req.body;
   let { program } = req.body;
 
   if ([username, email, password].some((field) => field?.trim() === "")) {
@@ -18,10 +18,17 @@ const createUser = asyncHandler(async (req, res) => {
   const existingUser = await User.findOne({
     email,
   });
-
   if (existingUser) {
     throw new ApiError(409, "User already exists with this email address!!");
   }
+
+  if (college && college !== "" && college !== "None") {
+    const existingCollege = await College.findById(college);
+    if (!existingCollege) {
+      throw new ApiError(404, "College not found!!");
+    }
+  }
+
 
   const roleExists = await Role.findById({
     _id: role,
@@ -75,9 +82,10 @@ const createUser = asyncHandler(async (req, res) => {
     program,
     batch: batch || undefined,
     mentorBatches: mentorBatches || undefined,
+    college: college || undefined,
   });
 
-  const user = await User.findById(createUser._id);
+  const user = await User.findById(createUser._id).populate("batch","name").populate("role","name").populate("college", "name");
 
   if (!user) {
     throw new ApiError(500, "Error while creating user.");
@@ -93,8 +101,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
     .select("-password -refreshToken")
     .populate("role")
     .populate("batch")
-    .populate("mentorBatches")
-    .populate("program");
+    .populate("college");
 
   if (!users) {
     return res.status(200).json(new ApiResponse(200, "No users exist!", null));
@@ -112,7 +119,9 @@ const getUserById = asyncHandler(async (req, res) => {
     .select("-password -refreshToken")
     .populate("role")
     .populate("batch")
-    .populate("mentorBatches");
+    .populate("mentorBatches")
+    .populate("program")
+    .populate("college");
 
   if (!user) {
     throw new ApiError(404, "User not found !!");
@@ -125,12 +134,21 @@ const getUserById = asyncHandler(async (req, res) => {
 
 const updateUser = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { username, avatar, role, program, batch, mentorBatches } = req.body;
+  const { username, avatar, role, email, program, batch, mentorBatches, college } = req.body;
 
-  const user = await User.findById(id);
+  const user = await User.findById(id).populate("role", "name isSystemRole");
 
   if (!user) {
     throw new ApiError(404, "User not found!!");
+  }
+  if(user.role.isSystemRole){
+    const userRole = await Role.findById(req.user.role);
+    if (userRole.name !== "Super Admin") {
+      throw new ApiError(
+        400,
+        "This user cannot be updated as he/she is having a SystemRole.",
+      );
+    }
   }
 
   if (username !== undefined) {
@@ -141,27 +159,49 @@ const updateUser = asyncHandler(async (req, res) => {
   }
 
   if (role !== undefined) {
-    const roleExists = await Role.findById(role);
-    if (!roleExists) {
+    const newRole = await Role.findById(role);
+    if (!newRole) {
       throw new ApiError(400, "Role not found!!");
     }
     user.role = role;
   }
 
-  const roleExists = await Role.findById(role);
-
-  if (batch !== undefined && batch !== "" && roleExists.name === "Intern") {
-    const batchExists = await Batch.findById(batch);
-    if (!batchExists) {
-      throw new ApiError(404, "Batch not found!!!");
+  if(email !== undefined){
+    if (!email.trim()) {
+      throw new ApiError(400, "Email cannot be empty!!");
     }
-    user.batch = batch;
-    user.program = [batchExists.program];
+    user.email = email.trim();
   }
 
-  if (roleExists.name === "Intern" && batch === "") {
-    user.batch = null;
-    user.program = program;
+  const roleExists = await Role.findById(user.role);
+
+  if (!roleExists) {
+    throw new ApiError(400, "User has no valid role assigned!!");
+  }
+  if (college !== undefined && college !== "" && college !== "None" && college !== null) {
+    const existingCollege = await College.findById(college);
+    if (!existingCollege) {
+      throw new ApiError(404, "College not found!!");
+    }
+  }
+
+  if (roleExists.name === "Intern") {
+    if (batch !== undefined) {
+      if (batch !== "" && batch !== "None" && batch !== null) {
+        const batchExists = await Batch.findById(batch);
+        if (!batchExists) {
+          throw new ApiError(404, "Batch not found!!!");
+        }
+        user.batch = batch;
+        user.program = [batchExists.program];
+      } else {
+        user.batch = null;
+        user.program = program;
+      }
+    }
+    if (college !== undefined) {
+      user.college = (college === "" || college === "None" || college === null) ? null : college;
+    }
   }
 
   if (mentorBatches !== undefined && roleExists.name === "Mentor") {
@@ -174,6 +214,7 @@ const updateUser = asyncHandler(async (req, res) => {
     }
     user.mentorBatches = mentorBatches;
     user.batch = null;
+    user.college = null;
     const batches = await Batch.find({ _id: { $in: mentorBatches } }).select(
       "program",
     );
@@ -186,13 +227,17 @@ const updateUser = asyncHandler(async (req, res) => {
     user.mentorBatches = [];
   }
 
+  if(roleExists.name !== "Intern" && roleExists.name !== "Mentor"){
+    user.program = [];
+    user.college = null;
+  }
   await user.save();
 
   const updatedUser = await User.findById(user._id)
     .select("-password -refreshToken")
     .populate("role")
     .populate("batch")
-    .populate("mentorBatches");
+    .populate("college");
 
   return res
     .status(200)
@@ -208,10 +253,13 @@ const deleteUser = asyncHandler(async (req, res) => {
   }
 
   if (user.role.isSystemRole) {
+    const userRole = await Role.findById(req.user.role);
+    if(userRole.name !== "Super Admin"){
     throw new ApiError(
       400,
       "This user cannot be deleted as he/she is having a SystemRole.",
     );
+  }
   }
   await User.findByIdAndDelete(id);
 
@@ -229,10 +277,13 @@ const toggleIsActive = asyncHandler(async (req, res) => {
   }
 
   if (user.role.isSystemRole) {
-    throw new ApiError(
-      400,
-      "This user cannot be deleted as he/she is having a SystemRole.",
-    );
+    const userRole = await Role.findById(req.user.role);
+    if (userRole.name !== "Super Admin") {
+      throw new ApiError(
+        400,
+        "This user cannot be deleted as he/she is having a SystemRole.",
+      );
+    }
   }
 
   user.isActive = !user.isActive;
@@ -244,6 +295,21 @@ const toggleIsActive = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, user, "User active status toggled."));
 });
 
+const getAllInternsByBatch = asyncHandler(async (req, res) => {
+  const { batchId } = req.params; 
+
+  const batch = await Batch.findById(batchId);
+  if (!batch) {
+    throw new ApiError(404, "Batch not found!!");
+  }
+
+  const interns = await User.find({ batch: batchId }).select("username email isActive");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, interns, "Interns fetched successfully."));
+});
+
 export {
   createUser,
   getAllUsers,
@@ -251,4 +317,5 @@ export {
   updateUser,
   deleteUser,
   toggleIsActive,
+  getAllInternsByBatch,
 };
