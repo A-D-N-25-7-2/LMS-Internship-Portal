@@ -10,3 +10,4 @@ export const deleteUser = (id) => api.delete(`/users/delete/${id}`);
 export const getAllRoles = () => api.get("/roles/list-names");
 export const getAllBatches = () => api.get("/batches/list-names");
 export const getAllPrograms = () => api.get("/programs/list-names");
+export const getAllColleges = () => api.get("/colleges/list-names");

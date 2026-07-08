@@ -53,7 +53,7 @@ const getAllBatches = asyncHandler(async (req, res) => {
    filter._id = { $in: req.user.mentorBatches };
  }
 
-  const batches = await Batch.find(filter).populate("program", "name");
+  const batches = await Batch.find(filter).populate("program", "name").sort({ startDate: -1 });
 
   return res
     .status(200)

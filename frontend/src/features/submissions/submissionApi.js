@@ -19,3 +19,5 @@ export const gradeSubmission = (submissionId, marks) =>
 export const getSubmissionFile = (submissionId, index) =>
   api.get(`/submissions/file/${submissionId}/${index}`, { responseType: "blob" });
 
+export const deleteSubmission = (submissionId) =>
+  api.delete(`/submissions/delete/${submissionId}`);

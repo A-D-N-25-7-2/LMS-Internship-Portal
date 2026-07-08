@@ -1,28 +1,34 @@
 import { Router } from "express";
 import { verifyJWT } from "../middlewares/auth.middlewares.js";
-import { authorizePermissions} from "../middlewares/authorizePermissions.middlewares.js";
+import { authorizePermissions } from "../middlewares/authorizePermissions.middlewares.js";
 import {
-  markAttendance,
+  heartbeat,
   updateAttendance,
-  getAttendanceByBatch,
   getMyAttendance,
+  getAttendanceByIntern,
+  getAttendanceByBatch,
   getAttendanceByDate,
 } from "../controllers/attendance.controllers.js";
 
 const router = Router();
 router.use(verifyJWT);
+
+router.route("/heartbeat").post(heartbeat);
+
+router.route("/get-mine").get(getMyAttendance);
+
 router
-  .route("/create")
-  .post(authorizePermissions("attendance:create"), markAttendance);
-router
-  .route("/update")
+  .route("/:internId/:date")
   .patch(authorizePermissions("attendance:update"), updateAttendance);
+
 router
-  .route("/get-by-attendance")
+  .route("/intern/:internId")
+  .get(authorizePermissions("attendance:read"), getAttendanceByIntern);
+
+router
+  .route("/batch/:batchId")
   .get(authorizePermissions("attendance:read"), getAttendanceByBatch);
-router
-  .route("/get-mine")
-  .get(authorizePermissions("attendance:read"), getMyAttendance);
+
 router
   .route("/get-by-date")
   .get(authorizePermissions("attendance:read"), getAttendanceByDate);

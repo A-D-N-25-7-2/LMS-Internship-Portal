@@ -6,6 +6,7 @@ import {
     updateCollege,
     deleteCollege,
     getAllColleges,
+    getAllCollegeNames,
     getCollegeById
 } from "../controllers/college.controllers.js";
 
@@ -16,6 +17,7 @@ router.route("/create").post(authorizePermissions("college:create"), createColle
 router.route("/update/:id").patch(authorizePermissions("college:update"), updateCollege);
 router.route("/delete/:id").delete(authorizePermissions("college:delete"), deleteCollege);
 router.route("/list").get(authorizePermissions("college:read"), getAllColleges);
+router.route("/list-names").get(getAllCollegeNames);
 router.route("/get/:id").get(authorizePermissions("college:read"), getCollegeById);
 
 export default router;

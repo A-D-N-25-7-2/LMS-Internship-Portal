@@ -10,8 +10,8 @@ import {
   getAllRoles,
   getAllBatches,
   getAllPrograms,
+  getAllColleges,
 } from "@/features/users/userApi";
-import { getAllColleges } from "@/features/colleges/collegeApi";
 import { usePermission } from "@/hooks/usePermission";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,6 +87,21 @@ const UsersPage = () => {
 
   // toggle loading per user
   const [togglingId, setTogglingId] = useState(null);
+
+  // Filters State
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const filteredUsers = users.filter((u) => {
+    const matchesRole = roleFilter === "all" || u.role?._id === roleFilter;
+    let matchesStatus = true;
+    if (statusFilter === "active") {
+      matchesStatus = u.isActive === true;
+    } else if (statusFilter === "inactive") {
+      matchesStatus = u.isActive === false;
+    }
+    return matchesRole && matchesStatus;
+  });
 
   // fetch users + roles
   const fetchData = async () => {
@@ -327,22 +342,66 @@ const UsersPage = () => {
           No users found. Create one to get started.
         </div>
       ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Username</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Batch</TableHead>
-                <TableHead>Status</TableHead>
-                {showActions &&
-                <TableHead className="text-right">Actions</TableHead>
-}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((user) => (
+        <div className="space-y-4">
+          {/* Filters Panel */}
+          <div className="bg-card border rounded-lg p-4 shadow-sm">
+            <div className="flex gap-4">
+              {/* Role Filter */}
+              <div className="space-y-2 w-full sm:w-[220px]">
+                <Label className="text-xs">Filter by Role</Label>
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Roles" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    {roles.map((r) => (
+                      <SelectItem key={r._id} value={r._id}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Status Filter */}
+              <div className="space-y-2 w-full sm:w-[220px]">
+                <Label className="text-xs">Filter by Status</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          {filteredUsers.length === 0 ? (
+            <div className="text-center py-20 border border-dashed rounded-lg bg-accent/5 text-muted-foreground">
+              No users match your filters.
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Username</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Batch</TableHead>
+                    <TableHead>Status</TableHead>
+                    {showActions &&
+                    <TableHead className="text-right">Actions</TableHead>
+    }
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.map((user) => (
                 <TableRow key={user._id}>
                   <TableCell className="font-medium">{user.username}</TableCell>
                   <TableCell className="text-muted-foreground">
@@ -420,6 +479,8 @@ const UsersPage = () => {
           </Table>
         </div>
       )}
+    </div>
+  )}
 
       {/* create/edit user modal */}
       <Dialog

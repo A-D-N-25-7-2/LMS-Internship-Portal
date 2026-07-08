@@ -8,6 +8,7 @@ import {
   getMySubmission,
   gradeSubmission,
   getSubmissionFile,
+  deleteSubmission
 } from "../controllers/submission.controllers.js";
 import { upload } from "../middlewares/upload.middlewares.js";
 
@@ -30,5 +31,6 @@ router
 router
   .route("/file/:id/:index")
   .get(authorizePermissions("submission:read"), getSubmissionFile);
+router.route("/delete/:id").delete(authorizePermissions("submission:delete"), deleteSubmission);
 
 export default router;

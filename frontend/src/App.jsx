@@ -39,6 +39,22 @@ const App = () => {
     initAuth();
   }, [dispatch]);
 
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === "user") {
+        if (e.newValue) {
+          const user = JSON.parse(e.newValue);
+          const permissions = JSON.parse(localStorage.getItem("permissions") || "[]");
+          dispatch(setCredentials({ user, permissions }));
+        } else {
+          dispatch(logout());
+        }
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [dispatch]);
+
    if (!authChecked) {
      return (
        <div className="flex h-screen items-center justify-center">

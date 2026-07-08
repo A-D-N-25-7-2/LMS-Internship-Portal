@@ -76,6 +76,11 @@ const getAllColleges = asyncHandler(async(req,res)=>{
     return res.status(200).json(new ApiResponse(200,colleges,"Colleges fetched successfully."));
 });
 
+const getAllCollegeNames = asyncHandler(async(req,res)=>{
+    const colleges = await College.find().select("name");
+    return res.status(200).json(new ApiResponse(200,colleges,"Colleges fetched successfully."));
+});
+
 const getCollegeById = asyncHandler(async(req,res)=>{
     const {id} = req.params;
     const college = await College.findById(id);
@@ -85,4 +90,4 @@ const getCollegeById = asyncHandler(async(req,res)=>{
     return res.status(200).json(new ApiResponse(200,college,"College fetched successfully."));
 });
 
-export {createCollege,updateCollege,deleteCollege,getAllColleges,getCollegeById};
+export {createCollege,updateCollege,deleteCollege,getAllColleges,getAllCollegeNames,getCollegeById};

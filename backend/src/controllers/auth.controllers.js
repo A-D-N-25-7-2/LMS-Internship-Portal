@@ -83,6 +83,17 @@ const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid password");
   }
 
+  if (user.refreshToken) {
+    try {
+      jwt.verify(user.refreshToken, process.env.REFRESH_TOKEN_SECRET);
+      throw new ApiError(400, "Account has been already logged in on an another device");
+    } catch (err) {
+      if (err.statusCode === 400) {
+        throw err;
+      }
+    }
+  }
+
   const { accessToken, refreshToken } = await generateAccessAndRefreshToken(
     user._id,
   );

@@ -303,7 +303,7 @@ const DashboardPage = () => {
         <div className="space-y-8">
           {/* Mentor Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div className="border bg-card rounded-xl p-5 hover:shadow-md transition-all flex items-center justify-between group">
+            <div className="border bg-card rounded-xl p-5 hover:shadow-md hover:border-primary transition-all flex items-center justify-between group">
               <div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                   My Assigned Batches
@@ -317,7 +317,7 @@ const DashboardPage = () => {
               </div>
             </div>
 
-            <div className="border bg-card rounded-xl p-5 hover:shadow-md transition-all flex items-center justify-between group">
+            <div className="border bg-card rounded-xl p-5 hover:border-primary hover:shadow-md transition-all flex items-center justify-between group">
               <div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                   My Active Interns

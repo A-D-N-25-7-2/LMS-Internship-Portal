@@ -40,8 +40,23 @@ const LoginPage = () => {
       return;
     }
 
+   
     setLoading(true);
     setError("");
+
+     const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      const storedPermissions = localStorage.getItem("permissions");
+      dispatch(
+        setCredentials({
+          user: JSON.parse(storedUser),
+          permissions: storedPermissions ? JSON.parse(storedPermissions) : [],
+        }),
+      );
+      navigate("/dashboard", { replace: true });
+      setLoading(false);
+      return;
+    }
 
     try {
       const { data } = await api.post("/auth/login", formData);

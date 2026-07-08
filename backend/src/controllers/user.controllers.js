@@ -1,6 +1,8 @@
 import { User } from "../models/user.models.js";
 import { Role } from "../models/role.models.js";
 import { Batch } from "../models/batch.models.js";
+import { Submission } from "../models/submission.models.js";
+import { Attendance } from "../models/attendance.models.js";
 import { Program } from "../models/program.models.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -101,7 +103,7 @@ const getAllUsers = asyncHandler(async (req, res) => {
     .select("-password -refreshToken")
     .populate("role")
     .populate("batch")
-    .populate("college");
+    .sort({isActive: -1})
 
   if (!users) {
     return res.status(200).json(new ApiResponse(200, "No users exist!", null));
@@ -261,6 +263,9 @@ const deleteUser = asyncHandler(async (req, res) => {
     );
   }
   }
+
+  await Submission.deleteMany({ intern: user._id });
+  await Attendance.deleteMany({ intern: user._id });
   await User.findByIdAndDelete(id);
 
   return res

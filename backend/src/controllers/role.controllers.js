@@ -27,7 +27,7 @@ const createRole = asyncHandler(async (req, res) => {
   }
 
   const role = await Role.create({
-    name: name.trim(),
+    name: name.charAt(0).toUpperCase() + name.slice(1).trim(),
     description,
     permissions,
     isSystemRole: isSystemRole || false,

@@ -52,7 +52,7 @@ app.use("/api/v1/programs", programRouter);
 app.use("/api/v1/assignments", assignmentRouter);
 app.use("/api/v1/resources", resourceRouter);
 app.use("/api/v1/modules", moduleRouter);
-app.use("/api/v1/attendance", attendanceRouter); // attendance not attedances
+app.use("/api/v1/attendance", attendanceRouter);
 app.use("/api/v1/submissions", submissionRouter);
 app.use("/api/v1/colleges", collegeRouter);
 

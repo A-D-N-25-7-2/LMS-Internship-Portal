@@ -186,6 +186,22 @@ const getSubmissionFile = asyncHandler(async (req, res) => {
   return res.status(200).send(file.data);
 });
 
+const deleteSubmission = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const submission = await Submission.findById(id);
+
+  if (!submission) {
+    throw new ApiError(404, "Submission not found!!");
+  }
+
+  await submission.deleteOne();
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Submission deleted."));
+});
+
 export {
   submitAssignment,
   resubmitAssignment,
@@ -193,4 +209,5 @@ export {
   getMySubmission,
   gradeSubmission,
   getSubmissionFile,
+  deleteSubmission,
 };

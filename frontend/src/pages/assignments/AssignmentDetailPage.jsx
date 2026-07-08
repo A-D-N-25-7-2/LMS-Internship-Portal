@@ -7,6 +7,7 @@ import {
   getMySubmission,
   getSubmissionsByAssignment,
   gradeSubmission,
+  deleteSubmission
 } from "@/features/submissions/submissionApi";
 import { usePermission } from "@/hooks/usePermission";
 import FileViewer from "../resources/FileViewer";
@@ -16,6 +17,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 import {
   Loader2,
@@ -74,6 +86,7 @@ const AssignmentDetailPage = () => {
   const [gradeMarks, setGradeMarks] = useState("");
   const [gradingLoading, setGradingLoading] = useState(false);
   const [gradeError, setGradeError] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // File viewer state
   const [activeFileViewer, setActiveFileViewer] = useState(null);
@@ -110,6 +123,28 @@ const AssignmentDetailPage = () => {
 
   const canGrade = hasPermission("submission:grade");
   const canRead = hasPermission("submission:read");
+
+  const handleDeleteSubmission = async (submissionId) => {
+    setDeleteLoading(true);
+    try {
+      await deleteSubmission(submissionId);
+      if (canGrade || canRead) {
+        await fetchSubmissions();
+        setActiveSubId((prev) => (prev === submissionId ? null : prev));
+      } else {
+        await fetchMySubmission();
+      }
+    } catch (err) {
+      const errMsg = err.response?.data?.message || "Failed to delete submission.";
+      if (canGrade || canRead) {
+        setGradeError(errMsg);
+      } else {
+        setError(errMsg);
+      }
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchDetails = async () => {
@@ -243,8 +278,13 @@ const AssignmentDetailPage = () => {
 
   // Set default active tab
   useEffect(() => {
-    if (submissionsList.length > 0 && !activeSubId) {
-      setActiveSubId(submissionsList[0]._id);
+    if (submissionsList.length > 0) {
+      const exists = submissionsList.some((s) => s._id === activeSubId);
+      if (!activeSubId || !exists) {
+        setActiveSubId(submissionsList[0]._id);
+      }
+    } else {
+      setActiveSubId(null);
     }
   }, [submissionsList, activeSubId]);
 
@@ -325,7 +365,7 @@ const AssignmentDetailPage = () => {
               <FileText size={18} className="text-primary" /> Instructions
             </h2>
             <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap break-all">
-              <Linkify options={{ target: "_blank", className: "text-primary hover:underline font-semibold break-all" }}>
+              <Linkify options={{ target: "_blank", className: "text-blue-500 hover:underline font-semibold break-all" }}>
                 {assignment.description || "No specific instructions provided."}
               </Linkify>
             </p>
@@ -442,18 +482,85 @@ const AssignmentDetailPage = () => {
                   )}
 
 
-                  {mySubmission.status !== "graded" && (
-                    <Button
-                      variant="outline"
-                      className="w-full text-xs cursor-pointer"
-                      onClick={() => {
-                        setIsEditing(true);
-                        setExistingFiles(mySubmission.files || []);
-                        setSelectedFiles([]);
-                      }}
-                    >
-                      Edit Submission
-                    </Button>
+                  {mySubmission.status !== "graded" ? (
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1 text-xs cursor-pointer"
+                        onClick={() => {
+                          setIsEditing(true);
+                          setExistingFiles(mySubmission.files || []);
+                          setSelectedFiles([]);
+                        }}
+                      >
+                        Edit Submission
+                      </Button>
+                      {hasPermission("submission:delete") && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
+                              disabled={deleteLoading}
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Submission?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete your submission? This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDeleteSubmission(mySubmission._id)}
+                                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground cursor-pointer"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
+                  ) : (
+                    hasPermission("submission:delete") && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full text-xs text-muted-foreground hover:text-destructive cursor-pointer gap-1.5"
+                            disabled={deleteLoading}
+                          >
+                            <Trash2 size={14} /> Delete Submission
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Submission?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete your submission? This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteSubmission(mySubmission._id)}
+                              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground cursor-pointer"
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )
                   )}
                 </div>
               ) : (
@@ -688,15 +795,47 @@ const AssignmentDetailPage = () => {
                             )}
                           </p>
                         </div>
-                        <Badge
-                          className={
-                            activeSub.status === "graded"
-                              ? "bg-green-500/10 text-green-600 hover:bg-green-500/10 border-green-500/20"
-                              : "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10 border-orange-500/20"
-                          }
-                        >
-                          {activeSub.status === "graded" ? "Graded" : "Pending Grade"}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            className={
+                              activeSub.status === "graded"
+                                ? "bg-green-500/10 text-green-600 hover:bg-green-500/10 border-green-500/20"
+                                : "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10 border-orange-500/20"
+                            }
+                          >
+                            {activeSub.status === "graded" ? "Graded" : "Pending Grade"}
+                          </Badge>
+                          {hasPermission("submission:delete") && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  disabled={deleteLoading}
+                                >
+                                  <Trash2 size={16} />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Submission?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete {activeSub.intern?.username}'s submission? This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel className="cursor-pointer">Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteSubmission(activeSub._id)}
+                                    className="bg-destructive hover:bg-destructive/90 text-destructive-foreground cursor-pointer"
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                        </div>
                       </div>
 
                       {/* Two Column Grid */}
